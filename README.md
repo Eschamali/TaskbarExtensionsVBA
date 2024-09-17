@@ -65,14 +65,13 @@ Private Sub Workbook_Open()
     Dim hDll As LongPtr
     Dim sFolderPath As String
     
-    'DLLﾌｧｲﾙを保存するﾌｫﾙﾀﾞﾊﾟｽを設定
+    'DLLファイルを保存するフォルダパスを設定
     sFolderPath = ThisWorkbook.Path
     
     'DLLﾌｧｲﾙを読み込む
-    hDll = LoadLibrary(sFolderPath & "\" & "TaskbarProgress.dll")　'"DLLﾌｧｲﾙﾌﾙﾊﾟｽ
+    hDll = LoadLibrary(sFolderPath & "\" & "TaskbarProgress.dll")　'DLLファイルフルパス
 
-	debug.print hDll
-    
+    debug.print hDll
 End Sub
 ```
 
@@ -93,20 +92,20 @@ Declare PtrSafe Sub SetTaskbarOverlayIcon Lib "TaskbarProgress.dll" (ByVal hwnd 
 ```bas
 Sub TaskbarProgressTest()
     Dim hwnd As LongPtr
-    Dim currentProgress As Long
-    Dim maxProgress As Long
+    Dim current As Long
+    Dim maximum As Long
     Dim Status As Long
     
     ' ウィンドウハンドルを取得
     hwnd = Application.hwnd
     
     ' 進捗の設定
-    currentProgress = 50
-    maxProgress = 100
+    current = 50
+    maximum = 100
     Status = 2
     
     ' DLL関数の呼び出し
-    SetTaskbarProgress hwnd, currentProgress, maxProgress, Status
+    SetTaskbarProgress hwnd, current, maximum, Status
 End Sub
 ```
 
@@ -118,8 +117,8 @@ End Sub
 | 名称            | 説明                                                                             | 
 | --------------- | -------------------------------------------------------------------------------- | 
 | hwnd            | 適用させるウィンドウハンドルを指定。<br>基本は、Application.hwnd　を指定します。 | 
-| currentProgress | 現在の進捗値                                                                     | 
-| maxProgress     | 最大(ゲージMax)とする値                                                          | 
+| current         | 現在の進捗値                                                                     | 
+| maximum         | 最大(ゲージMax)とする値                                                          | 
 | Status          | プログレスバーの状態(0,1,2,4,8 のいずれか)                                        | 
 
 ### Status について
@@ -133,3 +132,50 @@ End Sub
 | 2   | TBPF_NORMAL<br>進行状況インジケーターのサイズは、完了した操作の推定量に比例して左から右に大きくなります。                                         |![alt text](doc/Demo7.png)| 
 | 4   | TBPF_ERROR<br>進行状況インジケーターが赤に変わり、進行状況をブロードキャストしているいずれかのウィンドウでエラーが発生したことを示します。        |![alt text](doc/Demo10.png)| 
 | 8   | TBPF_PAUSED<br>進行状況インジケーターが黄色に変わり、進行状況は現在いずれかのウィンドウで停止されていますが、ユーザーが再開できることを示します。 |![alt text](doc/Demo11.png)| 
+
+## SetTaskbarOverlayIcon
+サンプルコード
+```bas
+Sub SetOverlayIconFromDLLExample()
+    Dim hwnd As LongPtr
+    Dim dllPath As String
+    Dim iconIndex As Long
+    Dim description As String
+    
+    ' ウィンドウハンドルを取得
+    hwnd = Application.hwnd
+    
+    ' 任意のアイコンデータがあるフルパス(ico,dll,exe に対応)
+    'dllPath = "C:\Program Files\Microsoft Office\root\Office16\XLICONS.EXE"
+    dllPath = "C:\Windows\System32\shell32.dll"
+    'dllPath = "C:\Users\user\Downloads\sample.ico"
+
+    ' アイコンのインデックス（DLL,exe内のアイコン番号）
+    iconIndex = 240
+    
+    ' アイコンの説明テキスト
+    description = "Custom Icon from DLL"
+    
+    ' DLL関数を呼び出し、タスクバーにオーバーレイアイコンを設定
+    SetTaskbarOverlayIcon hwnd, StrPtr(dllPath), iconIndex, StrPtr(description)
+End Sub
+```
+
+上記のサンプルをWin 11で実行すると、このようになります。<br>
+![alt text](doc/Demo12.png)
+
+### 引数の説明
+
+| 名称            | 説明                                                                             | 
+| --------------- | -------------------------------------------------------------------------------- | 
+| hwnd            | 適用させるウィンドウハンドルを指定。<br>基本は、Application.hwnd　を指定します。 | 
+| dllPath         | 任意のアイコンデータがあるフルパス<br>文字列へのポインターを利用するため、StrPtrを経由する必要があります | 
+| iconIndex       | アイコンのインデックス（DLL,exe内のアイコン番号）<br>icoファイルの場合は、この設定を無視します。| 
+| description     | アクセシビリティ用の代替テキスト<br>文字列へのポインターを利用するため、StrPtrを経由する必要があります | 
+
+なお、dllPath を省略したり、空文字、False で渡されると、ステータスアイコンを除去します。
+
+# Note
+DLL側の処理は、ある程度のエラー処理を施していますが、決して完璧ではありません。<br>
+そのため、DLLの関数を直接呼ぶのではなく、VBAの標準モジュールを介して、呼び出すことを推奨します。最近のPCであれば、誤差レベルです。<br>
+また、Win32APIの文字列関係はほとんど文字列へのポインターによって取得されるため、毎度 StrPtr を記述するのは大変なので、標準モジュールを介した作りにするといいでしょう。
