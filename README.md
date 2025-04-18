@@ -4,6 +4,8 @@ VBAから、タスクバー拡張機能の以下の機能にアクセスするDL
 - [ITaskbarList3::SetProgressState](https://learn.microsoft.com/ja-jp/windows/desktop/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setprogressstate)
 - [ITaskbarList3::SetProgressValue](https://learn.microsoft.com/ja-jp/windows/desktop/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setprogressvalue)
 - [ITaskbarList3::SetOverlayIcon](https://learn.microsoft.com/ja-jp/windows/desktop/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setoverlayicon)
+- [BadgeUpdateManager](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges)
+
 
 # DEMO
 - SetProgressState
@@ -85,6 +87,7 @@ hDll の中身が、0 以外であれば読み込み、成功です。
 ```bas
 Declare PtrSafe Sub SetTaskbarProgress Lib "TaskbarProgress.dll" (ByVal hwnd As LongPtr, ByVal current As Long, ByVal maximum As Long, ByVal Status As Long)
 Declare PtrSafe Sub SetTaskbarOverlayIcon Lib "TaskbarProgress.dll" (ByVal hwnd As LongPtr, ByVal dllPath As LongPtr, ByVal iconIndex As Long, ByVal description As LongPtr)
+Declare PtrSafe Sub SetTaskbarOverlayBadge Lib "TaskbarProgress.dll" (ByVal badgeValue As Long, ByVal appId As LongPtr)
 ```
 
 ## SetTaskbarProgress
@@ -173,9 +176,60 @@ End Sub
 | iconIndex       | アイコンのインデックス（DLL,exe内のアイコン番号）<br>icoファイルの場合は、この設定を無視します。| 
 | description     | アクセシビリティ用の代替テキスト<br>文字列へのポインターを利用するため、StrPtrを経由する必要があります | 
 
-なお、dllPath を省略したり、空文字、False で渡されると、ステータスアイコンを除去します。
+なお、ステータスアイコンを除去するには、 iconIndex を -1 にすればOKです。
+
+## SetTaskbarOverlayBadge
+サンプルコード
+```bas
+Sub BadgeUpdaterExample()
+    'DLL内の関数を実行
+    Call SetTaskbarOverlayBadge(30, StrPtr("Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel"))
+End Sub
+```
+
+上記のサンプルをWin 11で実行すると、このようになります。<br>
+![alt text](doc/Demo13.png)
+
+### 引数の説明
+
+| 名称            | 説明                                                                             | 
+| --------------- | -------------------------------------------------------------------------------- | 
+| badgeValue      | \<badge value="X"/> の X の値を決めるIDです。詳細は次のセクションで     | 
+| appId           | [appUserModelID](https://www.ka-net.org/blog/?p=6250) を指定します。調べ方は、割愛します | 
+
+### badgeValue のついて
+
+指定数値に応じて、バッチアイコンを変化する仕様にしています。
+詳細は、[こちら](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges)をどうぞ
+
+| 数字      | バッチアイコン                                                                             | 
+| --------- | -------------------------------------------------------------------------------- | 
+| 100以上   | ![100 Over](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-numeric-greater.png)     | 
+| 1 ~ 99    | ![1 from 99](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-numeric.png)           | 
+| 0,-13以下 | バッジ表示なし(リセット)                                                                                                                      | 
+| -1        | ![activity](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-activity.png)           | 
+| -2        | ![alert](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-alert.png)           | 
+| -3        | ![alarm](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-alarm.png)           | 
+| -4        | ![available](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-available.png)           | 
+| -5        | ![away](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-away.png)           | 
+| -6        | ![busy](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-busy.png)           | 
+| -7        | ![newMessage](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-newMessage.png)           | 
+| -8        | ![paused](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-paused.png)           | 
+| -9        | ![playing](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-playing.png)           | 
+| -10       | ![unavailable](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-unavailable.png)           | 
+| -11       | ![error](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-error.png)           | 
+| -12       | ![attention](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-attention.png)           | 
+
+### SetTaskbarOverlayIcon との違い
+
+| 内容      | SetTaskbarOverlayBadge        | SetTaskbarOverlayIcon | 補足説明 |
+| --------- | ------------------------------|-----------------------|---------| 
+| アプリ     |  UWP(Windows ストア)アプリのみ | ウィンドウハンドルが取れれば何でも| [こっちのExcel](https://www.microsoft.com/store/productId/9WZDNCRFJBH3?ocid=libraryshare)は、バッチアイコンを付けれますが、[こちらのデスクトップ版Excel](https://www.microsoft.com/ja-jp/microsoft-365/excel#Plans-pricing)では、付けることができません… |
+| バッチアイコン | ・明示的にリセットコマンドを送らない限り、保持<br>・システム提供のバッジ イメージしか使用できません | ・アプリを閉じると、バッチアイコンも消滅<br>・好きなアイコンを付けれます||
+
+
 
 # Attention
 DLL側の処理は、ある程度のエラー処理を施していますが、決して完璧ではありません。<br>
-そのため、DLLの関数を直接呼ぶのではなく、VBAの標準モジュール内のプロシージャを介して、呼び出すことを推奨します。最近のPCであれば、誤差レベルです。<br>
-また、Win32APIの文字列関係はほとんど文字列へのポインターによって取得されるため、毎度 StrPtr を記述するのは大変なので、プロシージャを介した作りにするといいでしょう。
+そのため、DLLの関数を直接呼ぶのではなく、VBAの標準モジュール内のプロシージャを介して、エラー処理をしつつ、呼び出すことを推奨します。最近のPCであれば、誤差レベルです。<br>
+また、Win32APIの文字列関係はほとんど、文字列へのポインターによって取得されるため、毎度 StrPtr を記述するのは大変なので、プロシージャを介した作りにするといいでしょう。
