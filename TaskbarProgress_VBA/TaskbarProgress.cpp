@@ -80,6 +80,8 @@ void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned lon
 //             ・filePath    アイコンを含むファイルフルパス
 //             ・iconIndex   dll等のアイコンセットを読み込んだ際の、読み込み位置
 //             ・description アクセシビリティ向け説明文
+//---------------------------------------------------------------------------------------------------
+//* 機能説明 ：オーバーレイの削除には、iconIndex を -1 以下にします。
 //***************************************************************************************************
 void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description)
 {
@@ -91,8 +93,8 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         return;
     }
 
-    // filePathがNULLか空文字の場合はアイコンを削除する
-    if (filePath == nullptr || wcslen(filePath) == 0) {
+    // iconIndexが0未満の場合、アイコンを削除する
+    if (iconIndex < 0) {
         hr = pTaskbarList->SetOverlayIcon(hwnd, NULL, NULL);
         if (FAILED(hr)) {
             MessageBoxW(nullptr, L"FFailed to remove overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
