@@ -1,12 +1,56 @@
+//設定がまとまってるヘッダーファイルを指定
 #include "TaskbarProgress.h" 
 
-//必要な関数セットをインポート
-#include "windows.h"
-#include "shobjidl.h"
+//よく使う名前定義を用意する
+using namespace winrt;
+using namespace winrt::Windows::UI::Notifications;
+using namespace winrt::Windows::Data::Xml::Dom;
 
-#include "iostream"  // デバッグ用
 
-//指定アプリハンドルのタスクバーに、プログレスバーの値とステータスを指定します。
+
+//***************************************************************************************************
+//                                 ■■■ 内部のヘルパー関数 ■■■
+//***************************************************************************************************
+//* 機能　　 ：内部でバッジ名に変換する関数
+//---------------------------------------------------------------------------------------------------
+//* 引数　　 ：badgeValue    任意の整数
+//* 返り値　 ：引数の数値に応じたバッジ名
+//---------------------------------------------------------------------------------------------------
+//* URL      ：https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges
+//***************************************************************************************************
+static std::wstring GetBadgeValueString(int badgeValue)
+{
+    switch (badgeValue) {
+    case -1:  return L"activity";
+    case -2:  return L"alert";
+    case -3:  return L"alarm";
+    case -4:  return L"available";
+    case -5:  return L"away";
+    case -6:  return L"busy";
+    case -7:  return L"newMessage";
+    case -8:  return L"paused";
+    case -9:  return L"playing";
+    case -10: return L"unavailable";
+    case -11: return L"error";
+    case -12: return L"attention";
+    default:
+        if (badgeValue <= -13) return L"none";
+        else return std::to_wstring(badgeValue);
+    }
+}
+
+
+
+//***************************************************************************************************
+//                                 ■■■ VBAから使用する関数 ■■■
+//***************************************************************************************************
+//* 機能　　 ：指定アプリハンドルのタスクバーに、プログレスバーの値とステータスを指定します。
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：・hwnd     タスクバーを適用させるハンドル
+//             ・current  現在値
+//             ・maximum  最大値
+//             ・status　 数値によって、色変更、不確定にできます。
+//***************************************************************************************************
 void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status)
 {
 	// ITaskbarList3インターフェースを取得
@@ -29,14 +73,21 @@ void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned lon
 
 }
 
-//指定アプリハンドルのタスク バー ボタンにオーバーレイを適用して、アプリケーションの状態または通知をユーザーに示します。
+//***************************************************************************************************
+//* 機能　　 ：指定アプリハンドルのタスク バー ボタンにオーバーレイを適用して、アプリケーションの状態または通知をユーザーに示します。
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：・hwnd        タスクバーを適用させるハンドル
+//             ・filePath    アイコンを含むファイルフルパス
+//             ・iconIndex   dll等のアイコンセットを読み込んだ際の、読み込み位置
+//             ・description アクセシビリティ向け説明文
+//***************************************************************************************************
 void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description)
 {
     // ITaskbarList3インターフェースを取得
     ITaskbarList3* pTaskbarList = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
     if (FAILED(hr)) {
-        std::wcerr << L"Failed to create ITaskbarList3 instance" << std::endl;
+        MessageBoxW(nullptr, L"Failed to create ITaskbarList3 instance.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -44,7 +95,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
     if (filePath == nullptr || wcslen(filePath) == 0) {
         hr = pTaskbarList->SetOverlayIcon(hwnd, NULL, NULL);
         if (FAILED(hr)) {
-            std::wcerr << L"Failed to remove overlay icon: " << hr << std::endl;
+            MessageBoxW(nullptr, L"FFailed to remove overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
         }
         pTaskbarList->Release();
         return;
@@ -58,7 +109,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         // .icoファイルからアイコンをロード
         hIcon = (HICON)LoadImage(NULL, filePath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE | LR_SHARED);
         if (hIcon == NULL) {
-            std::wcerr << L"Failed to load .ico file: " << GetLastError() << std::endl;
+            MessageBoxW(nullptr, L"Failed to load .ico file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
             pTaskbarList->Release();
             return;
         }
@@ -67,7 +118,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         // .exeファイルからアイコンをインデックス指定でロード
         hIcon = ExtractIcon(NULL, filePath, iconIndex);
         if (hIcon == NULL || hIcon == (HICON)1) {
-            std::wcerr << L"Failed to extract icon from .exe file: " << GetLastError() << std::endl;
+            MessageBoxW(nullptr, L"Failed to extract icon from .exe file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
             pTaskbarList->Release();
             return;
         }
@@ -76,14 +127,14 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         // .dllファイルからアイコンをインデックス指定でロード
         HMODULE hModule = LoadLibraryEx(filePath, NULL, LOAD_LIBRARY_AS_DATAFILE);
         if (hModule == NULL) {
-            std::wcerr << L"Failed to load .dll file: " << GetLastError() << std::endl;
+            MessageBoxW(nullptr, L"Failed to load .dll file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
             pTaskbarList->Release();
             return;
         }
 
         hIcon = (HICON)LoadImage(hModule, MAKEINTRESOURCE(iconIndex), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
         if (hIcon == NULL) {
-            std::wcerr << L"Failed to load icon from resource: " << GetLastError() << std::endl;
+            MessageBoxW(nullptr, L"Failed to load icon from resource.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
             FreeLibrary(hModule);
             pTaskbarList->Release();
             return;
@@ -92,7 +143,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         FreeLibrary(hModule);
     }
     else {
-        std::wcerr << L"Unsupported file type: " << extension << std::endl;
+        MessageBoxW(nullptr, L"Unsupported file type.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
         pTaskbarList->Release();
         return;
     }
@@ -100,7 +151,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
     // タスクバーにオーバーレイアイコンを設定
     hr = pTaskbarList->SetOverlayIcon(hwnd, hIcon, description);
     if (FAILED(hr)) {
-        std::wcerr << L"Failed to set overlay icon: " << hr << std::endl;
+        MessageBoxW(nullptr, L"Failed to set overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
     }
 
     // アイコンを解放
@@ -108,4 +159,50 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
 
     // リソースの解放
     pTaskbarList->Release();
+}
+
+//***************************************************************************************************
+//* 機能　　 ：指定アプリIDのタスク バー ボタンにオーバーレイを適用して、アプリケーションの状態または通知をユーザーに示します
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：・badgeValue        タスクバーを適用させるハンドル
+//             ・appUserModelID    appUserModelID
+//---------------------------------------------------------------------------------------------------
+//* 機能説明 ：アプリハンドルではなく、appUserModelID で指定するパターンです。
+//* 注意事項 ：・WinRT API環境のあるOSが必要です
+//             ・現時点では、デスクトップアプリに対しては効果ありません。
+//***************************************************************************************************
+void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID)
+{
+    // COMの初期化
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (hr == RPC_E_CHANGED_MODE) {
+        // 既に異なるアパートメント モードで初期化されている場合は、そのまま続行
+    }
+    else if (FAILED(hr)) {
+        wchar_t errorMsg[256];
+        swprintf_s(errorMsg, 256, L"COM初期化に失敗しました。HRESULT: 0x%08X", hr);
+        MessageBoxW(nullptr, errorMsg, L"エラー", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    try {
+        // バッジの値を文字列に変換
+        std::wstring badgeValueStr = GetBadgeValueString(badgeValue);
+        std::wstring xmlString = L"<badge value=\"" + badgeValueStr + L"\"/>";
+
+        // XMLの読み込み
+        XmlDocument doc;
+        doc.LoadXml(winrt::hstring(xmlString));
+
+        // バッジ通知オブジェクトの作成
+        BadgeNotification badge(doc);
+
+        // 指定したAppIDの通知マネージャを取得
+        auto notifier = BadgeUpdateManager::CreateBadgeUpdaterForApplication(winrt::hstring(appUserModelID));
+        notifier.Update(badge);
+    }
+    catch (...) {
+        // エラー処理
+        MessageBoxW(nullptr, L"バッジ通知の表示に失敗しました。", L"Badge Error", MB_OK | MB_ICONERROR);
+    }
 }
