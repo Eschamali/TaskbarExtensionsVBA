@@ -240,15 +240,16 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
 //***************************************************************************************************
 //* 機能　　 ： 指定したウィンドウハンドルにボタンを追加＆サブクラス化(メイン処理)
 //---------------------------------------------------------------------------------------------------
-//* 引数　 　： hwnd         ウィンドウハンドル
-//              callback     実行させたいVBA関数名(文字列ではなく、アドレス)
+//* 引数　 　： callback     実行させたいVBA関数名(文字列ではなく、アドレス)
 //              iconPath     アイコンファイルフルパス
 //              iconIndex    アイコン位置
+//              tipText      ボタンにカーソルを当てた際のツールチップ
+//              hwnd         ウィンドウハンドル
 //---------------------------------------------------------------------------------------------------
 //* 機能説明 ：ウィンドウハンドルをもとに、タスクバーにボタンを追加する処理。
 //             引数は基本、VBA の Application.hwnd を渡すこと
 //***************************************************************************************************
-void __stdcall SetThumbButtonWithIconEx(HWND hwnd, CallbackFunc callback, const wchar_t* iconPath, int iconIndex)
+void __stdcall SetThumbnailButton(CallbackFunc callback, LPCWSTR iconPath, int iconIndex, LPCWSTR tipText,HWND hwnd)
 {
     //VBA 側からコールバック関数ポインタを登録する
     g_callback = callback;
@@ -256,16 +257,16 @@ void __stdcall SetThumbButtonWithIconEx(HWND hwnd, CallbackFunc callback, const 
     //Icon設定値初期化
     HICON hIcon = nullptr;
 
-    // DLL/EXEからアイコン読み込み（アイコンインデックス指定）
+    // DLL,EXE,icoからアイコン読み込み（アイコンインデックス指定）
     ExtractIconExW(iconPath, iconIndex, &hIcon, nullptr, 1);
 
     // サムネイルボタン設定
-    THUMBBUTTON thumbButton = { 0 };
+    THUMBBUTTON thumbButton = {};
     thumbButton.iId = THUMB_BTN_ID;
     thumbButton.dwMask = THB_FLAGS | THB_ICON | THB_TOOLTIP;
     thumbButton.hIcon = hIcon;
     thumbButton.dwFlags = THBF_ENABLED;
-    wcscpy_s(thumbButton.szTip, L"VBAマクロ、実行");
+    wcscpy_s(thumbButton.szTip, tipText);
 
     //ボタンを追加      
     ITaskbarList3* pTaskbar = nullptr;
@@ -275,8 +276,10 @@ void __stdcall SetThumbButtonWithIconEx(HWND hwnd, CallbackFunc callback, const 
         pTaskbar->Release();
     }
 
+    // サブクラス化
     SetWindowSubclass(hwnd, SubclassProc, 1, 0);
 
+    //解放
     if (hIcon) {
         DestroyIcon(hIcon);
     }
