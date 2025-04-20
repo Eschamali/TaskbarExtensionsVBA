@@ -228,6 +228,9 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
         if (LOWORD(wParam) == THUMB_BTN_ID && g_callback) {
             // ボタンが押されたとき、VBA から渡された関数を実行
             (*g_callback)();
+
+            // ★既定処理に渡さず、ここで完了と伝える
+            return 0;
         }
     }
     // その他のメッセージは既定の処理へ
