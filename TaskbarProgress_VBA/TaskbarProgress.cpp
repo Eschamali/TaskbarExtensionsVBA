@@ -267,7 +267,7 @@ void __stdcall SetThumbButtonWithIconEx(HWND hwnd, CallbackFunc callback, const 
     thumbButton.dwFlags = THBF_ENABLED;
     wcscpy_s(thumbButton.szTip, L"VBAマクロ、実行");
 
-      
+    //ボタンを追加      
     ITaskbarList3* pTaskbar = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pTaskbar)))) {
         pTaskbar->HrInit();
