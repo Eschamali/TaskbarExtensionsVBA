@@ -6,6 +6,12 @@ using namespace winrt;
 using namespace winrt::Windows::UI::Notifications;
 using namespace winrt::Windows::Data::Xml::Dom;
 
+// グローバル変数として保持（後で呼び出す）
+static CallbackFunc g_callback = nullptr;
+
+// ボタンIDの定義（複数ボタン対応を見越して定義）
+#define THUMB_BTN_ID 1001
+
 
 
 //***************************************************************************************************
@@ -206,5 +212,68 @@ void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserMode
     catch (...) {
         // エラー処理
         MessageBoxW(nullptr, L"バッジ通知の表示に失敗しました。", L"Badge Error", MB_OK | MB_ICONERROR);
+    }
+}
+
+//***************************************************************************************************
+//* 機能　　 ：タスクバーボタンが押されたときの通知を受け取り、VBA関数を呼び出すウィンドウプロシージャ。
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：※割愛します
+//---------------------------------------------------------------------------------------------------
+//* 機能説明 ：サブクラスプロシージャ（ボタン押下などのメッセージを受け取る）
+//***************************************************************************************************
+LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    if (msg == WM_COMMAND) {
+        if (LOWORD(wParam) == THUMB_BTN_ID && g_callback) {
+            // ボタンが押されたとき、VBA から渡された関数を実行
+            (*g_callback)();
+        }
+    }
+    // その他のメッセージは既定の処理へ
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+//***************************************************************************************************
+//* 機能　　 ： VBA 側からコールバック関数ポインタを登録するための関数
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　： callback     実行させたいVBA関数名(文字列ではなく、アドレス)
+//---------------------------------------------------------------------------------------------------
+//* 機能説明 ：VBA から関数ポインタを登録するためのエクスポート関数。
+//***************************************************************************************************
+void __stdcall SetThumbButtonCallback(CallbackFunc callback)
+{
+    g_callback = callback;
+}
+
+//***************************************************************************************************
+//* 機能　　 ： 指定したウィンドウハンドルにボタンを追加＆サブクラス化(メイン処理)
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　： hwnd     ウィンドウハンドル
+//---------------------------------------------------------------------------------------------------
+//* 機能説明 ：ウィンドウハンドルをもとに、タスクバーにボタンを追加する処理。
+//             引数は基本、VBA の Application.hwnd を渡すこと
+//***************************************************************************************************
+void __stdcall AddThumbButton(HWND hwnd)
+{
+    // サブクラス化してメッセージフックを開始
+    SetWindowSubclass(hwnd, SubclassProc, 1, 0);
+
+    // タスクバーインターフェースの取得
+    ITaskbarList3* pTaskbar = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbar));
+    if (SUCCEEDED(hr)) {
+        pTaskbar->HrInit();
+
+        // ボタン情報を設定
+        THUMBBUTTON thumbButton = {};
+        thumbButton.iId = THUMB_BTN_ID;
+        thumbButton.dwMask = THB_FLAGS | THB_TOOLTIP;
+        thumbButton.dwFlags = THBF_ENABLED;
+        wcscpy_s(thumbButton.szTip, L"VBAマクロ実行");
+
+        // ボタンを追加
+        pTaskbar->ThumbBarAddButtons(hwnd, 1, &thumbButton);
+        pTaskbar->Release();
     }
 }
