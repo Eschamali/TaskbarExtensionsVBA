@@ -238,45 +238,46 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
 }
 
 //***************************************************************************************************
-//* 機能　　 ： VBA 側からコールバック関数ポインタを登録するための関数
-//---------------------------------------------------------------------------------------------------
-//* 引数　 　： callback     実行させたいVBA関数名(文字列ではなく、アドレス)
-//---------------------------------------------------------------------------------------------------
-//* 機能説明 ：VBA から関数ポインタを登録するためのエクスポート関数。
-//***************************************************************************************************
-void __stdcall SetThumbButtonCallback(CallbackFunc callback)
-{
-    g_callback = callback;
-}
-
-//***************************************************************************************************
 //* 機能　　 ： 指定したウィンドウハンドルにボタンを追加＆サブクラス化(メイン処理)
 //---------------------------------------------------------------------------------------------------
-//* 引数　 　： hwnd     ウィンドウハンドル
+//* 引数　 　： hwnd         ウィンドウハンドル
+//              callback     実行させたいVBA関数名(文字列ではなく、アドレス)
+//              iconPath     アイコンファイルフルパス
+//              iconIndex    アイコン位置
 //---------------------------------------------------------------------------------------------------
 //* 機能説明 ：ウィンドウハンドルをもとに、タスクバーにボタンを追加する処理。
 //             引数は基本、VBA の Application.hwnd を渡すこと
 //***************************************************************************************************
-void __stdcall AddThumbButton(HWND hwnd)
+void __stdcall SetThumbButtonWithIconEx(HWND hwnd, CallbackFunc callback, const wchar_t* iconPath, int iconIndex)
 {
-    // サブクラス化してメッセージフックを開始
-    SetWindowSubclass(hwnd, SubclassProc, 1, 0);
+    //VBA 側からコールバック関数ポインタを登録する
+    g_callback = callback;
 
-    // タスクバーインターフェースの取得
+    //Icon設定値初期化
+    HICON hIcon = nullptr;
+
+    // DLL/EXEからアイコン読み込み（アイコンインデックス指定）
+    ExtractIconExW(iconPath, iconIndex, &hIcon, nullptr, 1);
+
+    // サムネイルボタン設定
+    THUMBBUTTON thumbButton = { 0 };
+    thumbButton.iId = THUMB_BTN_ID;
+    thumbButton.dwMask = THB_FLAGS | THB_ICON | THB_TOOLTIP;
+    thumbButton.hIcon = hIcon;
+    thumbButton.dwFlags = THBF_ENABLED;
+    wcscpy_s(thumbButton.szTip, L"VBAマクロ、実行");
+
+      
     ITaskbarList3* pTaskbar = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbar));
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pTaskbar)))) {
         pTaskbar->HrInit();
-
-        // ボタン情報を設定
-        THUMBBUTTON thumbButton = {};
-        thumbButton.iId = THUMB_BTN_ID;
-        thumbButton.dwMask = THB_FLAGS | THB_TOOLTIP;
-        thumbButton.dwFlags = THBF_ENABLED;
-        wcscpy_s(thumbButton.szTip, L"VBAマクロ実行");
-
-        // ボタンを追加
         pTaskbar->ThumbBarAddButtons(hwnd, 1, &thumbButton);
         pTaskbar->Release();
+    }
+
+    SetWindowSubclass(hwnd, SubclassProc, 1, 0);
+
+    if (hIcon) {
+        DestroyIcon(hIcon);
     }
 }
