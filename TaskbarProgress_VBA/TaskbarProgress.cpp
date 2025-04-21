@@ -6,11 +6,24 @@ using namespace winrt;
 using namespace winrt::Windows::UI::Notifications;
 using namespace winrt::Windows::Data::Xml::Dom;
 
-// グローバル変数として保持（後で呼び出す）
-static CallbackFunc g_callback = nullptr;
 
-// ボタンIDの定義（複数ボタン対応を見越して定義）
-#define THUMB_BTN_ID 1001
+
+//***************************************************************************************************
+//                           ■■■ ThumbButtonInfo クラス を扱う準備 ■■■
+//***************************************************************************************************
+#define MAX_BUTTONS 7                       // Thumb Button の上限数
+
+static CallbackFunc g_callback = nullptr;   // グローバル変数として保持（後で呼び出す）
+std::vector<ButtonInfo> g_buttons;          // ボタン情報
+HWND g_hwnd = nullptr;                      // ハンドルパラメーター
+ITaskbarList3* g_taskbar = nullptr;         // 型：ITaskbarList3 
+
+//タスク バーのサムネイルボタンのボタン情報
+struct ButtonInfo {
+    THUMBBUTTON button;
+    HICON hIcon;
+    std::wstring tooltip;
+};
 
 
 
@@ -43,6 +56,31 @@ static std::wstring GetBadgeValueString(int badgeValue)
         if (badgeValue <= -13) return L"none";
         else return std::to_wstring(badgeValue);
     }
+}
+
+//***************************************************************************************************
+//* 機能　　 ：タスクバーボタンが押されたときの通知を受け取り、VBA関数を呼び出すウィンドウプロシージャ。
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：※割愛します
+//---------------------------------------------------------------------------------------------------
+//* 機能説明 ：サブクラスプロシージャ（ボタン押下などのメッセージを受け取る）
+//***************************************************************************************************
+LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    if (msg == WM_COMMAND) {
+        int id = LOWORD(wParam);
+        if (id >= 0 && id < (int)g_buttons.size()) {
+            if (g_callback) {
+                // ボタンが押されたとき、VBA から渡された関数を実行
+                (*g_callback)();
+
+                // ★既定処理に渡さず、ここで完了と伝える
+                return 0;
+            }
+        }
+    }
+    // その他のメッセージは既定の処理へ
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 
@@ -215,27 +253,6 @@ void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserMode
     }
 }
 
-//***************************************************************************************************
-//* 機能　　 ：タスクバーボタンが押されたときの通知を受け取り、VBA関数を呼び出すウィンドウプロシージャ。
-//---------------------------------------------------------------------------------------------------
-//* 引数　 　：※割愛します
-//---------------------------------------------------------------------------------------------------
-//* 機能説明 ：サブクラスプロシージャ（ボタン押下などのメッセージを受け取る）
-//***************************************************************************************************
-LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
-{
-    if (msg == WM_COMMAND) {
-        if (LOWORD(wParam) == THUMB_BTN_ID && g_callback) {
-            // ボタンが押されたとき、VBA から渡された関数を実行
-            (*g_callback)();
-
-            // ★既定処理に渡さず、ここで完了と伝える
-            return 0;
-        }
-    }
-    // その他のメッセージは既定の処理へ
-    return DefSubclassProc(hwnd, msg, wParam, lParam);
-}
 
 //***************************************************************************************************
 //* 機能　　 ： 指定したウィンドウハンドルにボタンを追加＆サブクラス化(メイン処理)
