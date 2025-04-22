@@ -8,17 +8,14 @@
 #pragma comment(lib, "comctl32.lib")
 
 //外部参照設定つまりはVBAからでもアクセスできるようにする設定。おまじないと思ってください。
-//詳細：https://liclog.net/vba-dll-create-1/
+//詳細→https://liclog.net/vba-dll-create-1/
 #ifdef TaskbarProgressVBA_EXPORTS
 #define TaskbarProgressVBA_API __declspec(dllexport)
 #else
 #define TaskbarProgressVBA_API __declspec(dllimport)
 #endif
 
-// コールバック関数型の定義（VBA から渡される関数）
-typedef void(__stdcall* CallbackFunc)();
-
-// 構造体で、定義します。ここでは、文字列に関するパラメーターです
+// 構造体で、定義します。
 // ※VBA側で、シグネチャ（型や順序）が合うようにすること。例外として、BOOLはlongで渡さないと上手くいきません
 #pragma pack(4)
 struct THUMBBUTTONDATA
