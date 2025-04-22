@@ -17,7 +17,6 @@ using namespace winrt::Windows::Data::Xml::Dom;
 static ITaskbarList3* g_taskbar = nullptr;      //ITaskbarList3オブジェクト
 static THUMBBUTTON g_btns[MAX_BUTTONS] = {};    //ボタン情報格納用
 static std::wstring g_procNames[MAX_BUTTONS];   //コールバック用プロシージャ名の格納用
-HWND g_hwnd = nullptr;                          //ウィンドウハンドルパラメーター
 
 
 
@@ -89,28 +88,42 @@ void ExecuteVBAProcByIndex(int index) {
 }
 
 //***************************************************************************************************
-//* 機能　　 ：タスクバーボタンが押されたときの通知を受け取り、VBA関数を呼び出すウィンドウプロシージャ。
+//* 機能　　 ：事前に設定した hwnd に起きたことが、全部ここに届きます。
 //---------------------------------------------------------------------------------------------------
-//* 引数　 　：※割愛します
+//* 引数　 　：hwnd      メッセージを受け取ったウィンドウのハンドル(サブクラスに登録したhwnd)
+//             msg       メッセージの種類。Excelで言う、イベントの種類です（例：WM_COMMAND, WM_PAINT, WM_CLOSE など）
+//             wParam    メッセージによって意味が異なる補助データ　その1
+//             lParam    メッセージによって意味が異なる補助データ　その2
 //---------------------------------------------------------------------------------------------------
-//* 機能説明 ：サブクラスプロシージャ（ボタン押下などのメッセージを受け取る）
+//* 機能説明 ：Excelで言う、全イベント処理がここに集約されてるイメージです。イベントごとの処理は、Switch文がやりやすいです。
 //***************************************************************************************************
 LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
-    if (msg == WM_COMMAND) {
-        if (HIWORD(wParam) == THBN_CLICKED) {
-            int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
-            if (buttonIndex >= 0 && buttonIndex < 7) {
-                MessageBoxW(nullptr, L"CallBackしたよ", L"Call OK", MB_OK | MB_ICONERROR);
-                ExecuteVBAProcByIndex(buttonIndex);
+    //switch文で、イベントごとに「やりたい処理」を書く
+    switch (msg)
+    {
+        //タスクバーのサムネイルボタンをクリックすると、Windows は WM_COMMAND メッセージを送ってきます。
+        case WM_COMMAND:
+            //このイベントはボタンがクリックされた通知か判定します(今回は THBN_CLICKED となる)
+            if (HIWORD(wParam) == THBN_CLICKED) {
+                //補正処理
+                int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
+                std::wstring msg = L"ボタンインデックス: " + std::to_wstring(buttonIndex);
+                MessageBoxW(nullptr, msg.c_str(), L"Call back OK!", MB_OK | MB_ICONINFORMATION);
 
-                // ★既定処理に渡さず、ここで完了と伝える
+                //VBA内のプロシージャ名を実行する準備へ
+                ExecuteVBAProcByIndex(buttonIndex);
                 return 0;
             }
-        }
+
+            break;
+
+        //他のイベントは、何もしません
+        default:
+            break;
     }
 
-    // その他のメッセージは既定の処理へ
+    //他のイベントは、既定の処理へ
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
@@ -296,10 +309,13 @@ void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
     //初期化処理
     EnsureTaskbarInterface();
 
-    //0以下で渡されたら、ボタン自体を削除します
+    //0以下で渡されたら、ボタン自体を削除し、処理終了
     if (buttonCount <= 0) {
         memset(g_btns, 0, sizeof(g_btns));
         g_taskbar->ThumbBarAddButtons(hwnd, 0, nullptr);
+
+        //サブクラス化、解除
+        RemoveWindowSubclass;
         return;
     }
 
@@ -318,7 +334,7 @@ void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
     //反映処理
     g_taskbar->ThumbBarAddButtons(hwnd, buttonCount, g_btns);
 
-    // 対象のウィンドウハンドル(hwnd)をサブクラス化して、コールバックに対応させる
+    // 対象のウィンドウハンドル(hwnd)をサブクラス化して、様々なイベント処理に対応させる
     SetWindowSubclass(hwnd, SubclassProc, 1, 0);
 }
 
