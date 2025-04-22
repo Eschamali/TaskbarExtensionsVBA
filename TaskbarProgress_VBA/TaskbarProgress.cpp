@@ -17,6 +17,7 @@ using namespace winrt::Windows::Data::Xml::Dom;
 static ITaskbarList3* g_taskbar = nullptr;      //ITaskbarList3オブジェクト
 static THUMBBUTTON g_btns[MAX_BUTTONS] = {};    //ボタン情報格納用
 static std::wstring g_procNames[MAX_BUTTONS];   //コールバック用プロシージャ名の格納用
+HWND g_hwnd = nullptr;                          //ウィンドウハンドルパラメーター
 
 
 
@@ -62,6 +63,56 @@ void EnsureTaskbarInterface() {
     }
 }
 
+//***************************************************************************************************
+//* 機能　　 ：引数にあるプロシージャ名で、VBA マクロを実行します
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：Index     プロシージャ名があるIndex値
+//***************************************************************************************************
+void ExecuteVBAProcByIndex(int index) {
+    if (index < 0 || index >= 7 || g_procNames[index].empty()) return;
+
+    CLSID clsid;
+    CLSIDFromProgID(L"Excel.Application", &clsid);
+
+    IDispatch* pExcel = nullptr;
+    if (FAILED(GetActiveObject(clsid, nullptr, (IUnknown**)&pExcel))) return;
+
+    DISPID dispid;
+    LPOLESTR macroName = (LPOLESTR)g_procNames[index].c_str();
+
+    if (SUCCEEDED(pExcel->GetIDsOfNames(IID_NULL, &macroName, 1, LOCALE_USER_DEFAULT, &dispid))) {
+        DISPPARAMS params = { nullptr, nullptr, 0, 0 };
+        pExcel->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, nullptr, nullptr, nullptr);
+    }
+
+    pExcel->Release();
+}
+
+//***************************************************************************************************
+//* 機能　　 ：タスクバーボタンが押されたときの通知を受け取り、VBA関数を呼び出すウィンドウプロシージャ。
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：※割愛します
+//---------------------------------------------------------------------------------------------------
+//* 機能説明 ：サブクラスプロシージャ（ボタン押下などのメッセージを受け取る）
+//***************************************************************************************************
+LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    if (msg == WM_COMMAND) {
+        if (HIWORD(wParam) == THBN_CLICKED) {
+            int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
+            if (buttonIndex >= 0 && buttonIndex < 7) {
+                MessageBoxW(nullptr, L"CallBackしたよ", L"Call OK", MB_OK | MB_ICONERROR);
+                ExecuteVBAProcByIndex(buttonIndex);
+
+                // ★既定処理に渡さず、ここで完了と伝える
+                return 0;
+            }
+        }
+    }
+
+    // その他のメッセージは既定の処理へ
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
 
 
 
@@ -266,6 +317,9 @@ void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
 
     //反映処理
     g_taskbar->ThumbBarAddButtons(hwnd, buttonCount, g_btns);
+
+    // 対象のウィンドウハンドル(hwnd)をサブクラス化して、コールバックに対応させる
+    SetWindowSubclass(hwnd, SubclassProc, 1, 0);
 }
 
 //***************************************************************************************************
