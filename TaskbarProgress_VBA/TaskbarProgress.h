@@ -18,8 +18,24 @@
 // コールバック関数型の定義（VBA から渡される関数）
 typedef void(__stdcall* CallbackFunc)();
 
+// 構造体で、定義します。ここでは、文字列に関するパラメーターです
+// ※VBA側で、シグネチャ（型や順序）が合うようにすること。例外として、BOOLはlongで渡さないと上手くいきません
+#pragma pack(4)
+struct THUMBBUTTONDATA
+{
+    const wchar_t* ProcedureName;
+    const wchar_t* IconPath;
+    const wchar_t* Description;
+    LONG ButtonType;
+    LONG IconIndex;
+    LONG ButtonIndex;
+};
+#pragma pack()
+
+
 //VBAで扱いたい関数を宣言
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status);
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description);
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID);
-extern "C" TaskbarProgressVBA_API void __stdcall SetThumbnailButton(CallbackFunc callback, LPCWSTR iconPath, int iconIndex, LPCWSTR tipText, HWND hwnd);
+extern "C" TaskbarProgressVBA_API void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd);
+extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, HWND hwnd);

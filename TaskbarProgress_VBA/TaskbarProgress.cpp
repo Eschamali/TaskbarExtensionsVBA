@@ -11,19 +11,12 @@ using namespace winrt::Windows::Data::Xml::Dom;
 //***************************************************************************************************
 //                           ■■■ ThumbButtonInfo クラス を扱う準備 ■■■
 //***************************************************************************************************
-#define MAX_BUTTONS 7                       // Thumb Button の上限数
+#define MAX_BUTTONS 7                           //配置可能なボタンの上限数
+#define ButtonID_Correction 1001                //ボタンIDの採番開始番号
 
-static CallbackFunc g_callback = nullptr;   // グローバル変数として保持（後で呼び出す）
-std::vector<ButtonInfo> g_buttons;          // ボタン情報
-HWND g_hwnd = nullptr;                      // ハンドルパラメーター
-ITaskbarList3* g_taskbar = nullptr;         // 型：ITaskbarList3 
-
-//タスク バーのサムネイルボタンのボタン情報
-struct ButtonInfo {
-    THUMBBUTTON button;
-    HICON hIcon;
-    std::wstring tooltip;
-};
+static ITaskbarList3* g_taskbar = nullptr;      //ITaskbarList3オブジェクト
+static THUMBBUTTON g_btns[MAX_BUTTONS] = {};    //ボタン情報格納用
+static std::wstring g_procNames[MAX_BUTTONS];   //コールバック用プロシージャ名の格納用
 
 
 
@@ -59,29 +52,16 @@ static std::wstring GetBadgeValueString(int badgeValue)
 }
 
 //***************************************************************************************************
-//* 機能　　 ：タスクバーボタンが押されたときの通知を受け取り、VBA関数を呼び出すウィンドウプロシージャ。
-//---------------------------------------------------------------------------------------------------
-//* 引数　 　：※割愛します
-//---------------------------------------------------------------------------------------------------
-//* 機能説明 ：サブクラスプロシージャ（ボタン押下などのメッセージを受け取る）
+//* 機能　　 ：タスクバーのボタンUI準備ヘルパー
 //***************************************************************************************************
-LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
-{
-    if (msg == WM_COMMAND) {
-        int id = LOWORD(wParam);
-        if (id >= 0 && id < (int)g_buttons.size()) {
-            if (g_callback) {
-                // ボタンが押されたとき、VBA から渡された関数を実行
-                (*g_callback)();
-
-                // ★既定処理に渡さず、ここで完了と伝える
-                return 0;
-            }
-        }
+void EnsureTaskbarInterface() {
+    if (!g_taskbar) {
+        CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+        CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_taskbar));
+        if (g_taskbar) g_taskbar->HrInit();
     }
-    // その他のメッセージは既定の処理へ
-    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
+
 
 
 
@@ -253,51 +233,79 @@ void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserMode
     }
 }
 
-
 //***************************************************************************************************
-//* 機能　　 ： 指定したウィンドウハンドルにボタンを追加＆サブクラス化(メイン処理)
+//* 機能　　 ： 指定したウィンドウハンドルにボタン情報を確保します。
 //---------------------------------------------------------------------------------------------------
-//* 引数　 　： callback     実行させたいVBA関数名(文字列ではなく、アドレス)
-//              iconPath     アイコンファイルフルパス
-//              iconIndex    アイコン位置
-//              tipText      ボタンにカーソルを当てた際のツールチップ
-//              hwnd         ウィンドウハンドル
+//* 引数　 　： buttonCount     確保するボタン数
+//              hwnd            ウィンドウハンドル
 //---------------------------------------------------------------------------------------------------
-//* 機能説明 ：ウィンドウハンドルをもとに、タスクバーにボタンを追加する処理。
-//             引数は基本、VBA の Application.hwnd を渡すこと
+//* 注意事項 ： 非表示として確保するので、この処理だけでは見た目上、何も起こりません
 //***************************************************************************************************
-void __stdcall SetThumbnailButton(CallbackFunc callback, LPCWSTR iconPath, int iconIndex, LPCWSTR tipText,HWND hwnd)
-{
-    //VBA 側からコールバック関数ポインタを登録する
-    g_callback = callback;
+void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
+    //初期化処理
+    EnsureTaskbarInterface();
 
-    //Icon設定値初期化
-    HICON hIcon = nullptr;
-
-    // DLL,EXE,icoからアイコン読み込み（アイコンインデックス指定）
-    ExtractIconExW(iconPath, iconIndex, &hIcon, nullptr, 1);
-
-    // サムネイルボタン設定
-    THUMBBUTTON thumbButton = {};
-    thumbButton.iId = THUMB_BTN_ID;
-    thumbButton.dwMask = THB_FLAGS | THB_ICON | THB_TOOLTIP;
-    thumbButton.hIcon = hIcon;
-    thumbButton.dwFlags = THBF_ENABLED;
-    wcscpy_s(thumbButton.szTip, tipText);
-
-    //ボタンを追加      
-    ITaskbarList3* pTaskbar = nullptr;
-    if (SUCCEEDED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pTaskbar)))) {
-        pTaskbar->HrInit();
-        pTaskbar->ThumbBarAddButtons(hwnd, 1, &thumbButton);
-        pTaskbar->Release();
+    //0以下で渡されたら、ボタン自体を削除します
+    if (buttonCount <= 0) {
+        memset(g_btns, 0, sizeof(g_btns));
+        g_taskbar->ThumbBarAddButtons(hwnd, 0, nullptr);
+        return;
     }
 
-    // サブクラス化
-    SetWindowSubclass(hwnd, SubclassProc, 1, 0);
+    //上限を超えてたら、何もしない
+    if (buttonCount > MAX_BUTTONS) return;
 
-    //解放
-    if (hIcon) {
-        DestroyIcon(hIcon);
+    //非表示として、ボタン情報を確保する
+    for (int i = 0; i < MAX_BUTTONS; ++i) {
+        g_btns[i].dwMask = THB_FLAGS;
+        g_btns[i].dwFlags = THBF_HIDDEN;
+        g_btns[i].iId = i + ButtonID_Correction;
+        g_btns[i].hIcon = NULL;
+        g_btns[i].szTip[0] = L'\0';
     }
+
+    //反映処理
+    g_taskbar->ThumbBarAddButtons(hwnd, buttonCount, g_btns);
+}
+
+//***************************************************************************************************
+//* 機能　　 ： 指定したウィンドウハンドルにボタン情報を変更します。
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　： data     ユーザー定義型：THUMBBUTTONDATA
+//              hwnd     ウィンドウハンドル
+//---------------------------------------------------------------------------------------------------
+//* 注意事項 ： 非表示として確保するので、この処理だけでは見た目上、何も起こりません
+//***************************************************************************************************
+void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, HWND hwnd) {
+    //初期化
+    EnsureTaskbarInterface();
+
+    //範囲外のボタンIDなら、何もしない
+    if (!data || data->ButtonIndex  < 0 + ButtonID_Correction || data->ButtonIndex  >= MAX_BUTTONS + ButtonID_Correction) return;
+
+    //指定ボタンIDに対して、どんな有効なデータが含まれているか伝える
+    THUMBBUTTON& btn = g_btns[data->ButtonIndex - ButtonID_Correction];
+    btn.iId = data->ButtonIndex;                        //ツール バー内で一意のボタンのアプリケーション定義識別子。念の為、1001から刻む
+    btn.dwMask = THB_FLAGS | THB_ICON | THB_TOOLTIP;    //メンバーに有効なデータが含まれているかを指定する THUMBBUTTONMASK 値の組み合わせ。https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ne-shobjidl_core-thumbbuttonmask
+    btn.dwFlags = (THUMBBUTTONFLAGS)data->ButtonType;   //THUMBBUTTON によって、ボタンの特定の状態と動作を制御する
+
+    // ツールチップ
+    if (data->Description) {
+        wcsncpy_s(btn.szTip, data->Description, ARRAYSIZE(btn.szTip));
+    }
+
+    // アイコン
+    HICON hIcon = NULL;
+    if (data->IconPath) {
+        ExtractIconExW(data->IconPath, data->IconIndex, NULL, &hIcon, 1);
+    }
+    btn.hIcon = hIcon;
+
+    // コールバック用にプロシージャ名を保持
+    if (data->ProcedureName) {
+        g_procNames[data->ButtonIndex - ButtonID_Correction] = data->ProcedureName;
+    }
+
+    //変更を適用
+    g_taskbar->ThumbBarUpdateButtons(hwnd, MAX_BUTTONS, g_btns);
 }
