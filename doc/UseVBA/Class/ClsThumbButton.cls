@@ -61,34 +61,34 @@ Private Const ErrorNAme_範囲外THUMBBUTTON       As String = "THUMBBUTTON 範�
 '---------------------------クラスユーザー定義型------------------------------
 'VBA向け構造体作成
 Private Type THUMBBUTTON
-    ProcedureName   As String   '実行するプロシージャ名
-    ButtonType      As Long     'ボタン制御コード
-    IconPath        As String   'アイコンのパス
-    IconIndex       As Long     'アイコンインデックス
-    Description     As String   'ツールチップ
-    ButtonIndex     As Long     'ボタン位置
+    ProcedureAddress    As LongPtr  'VBA内のプロシージャ名のポインタ
+    ButtonType          As Long     'ボタン制御コード
+    IconPath            As String   'アイコンのパス
+    IconIndex           As Long     'アイコンインデックス
+    Description         As String   'ツールチップ
+    ButtonIndex         As Long     'ボタン位置
 End Type
 
 'DLL向け構造体作成
 Private Type THUMBBUTTONDATA
-    ProcedureName   As LongPtr  '実行するプロシージャ名
-    IconPath        As LongPtr  'ボタン制御コード
-    Description     As LongPtr  'アイコンのパス
-    ButtonType      As Long     'アイコンインデックス
-    IconIndex       As Long     'ツールチップ
-    ButtonIndex     As Long     'ボタン位置
+    ProcedureName       As LongPtr  '実行するプロシージャ名のポインタ形式
+    IconPath            As LongPtr  'ボタン制御コード
+    Description         As LongPtr  'アイコンのパス
+    ButtonType          As Long     'アイコンインデックス
+    IconIndex           As Long     'ツールチップ
+    ButtonIndex         As Long     'ボタン位置
 End Type
 
 
 
 '***************************************************************************************************
-'                                ■■■ THUMBBUTTON 構造体を追加 ■■■
+'                           ■■■ THUMBBUTTON 構造体を追加/変更 ■■■
 '***************************************************************************************************
 '* 機能    ：ウィンドウのサムネイル表現に埋め込まれたツール バーで使用されるボタンを定義します
 '---------------------------------------------------------------------------------------------------
 '* 返り値  ：ボタンを定義一覧情報が詰まった2次元配列
 '* 引数　　：ButtonIndex        追加位置
-'            ProcedureName      標準プロシージャにある引数なし関数名
+'            ProcedureAddress   VBA内のプロシージャ名アドレス
 '            ButtonType         ボタンの挙動
 '            iconPath           アイコンデータのあるフルパス
 '            iconIndex          複数アイコンがある場合の、Index値。
@@ -96,7 +96,7 @@ End Type
 '---------------------------------------------------------------------------------------------------
 '* URL      ：https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ns-shobjidl_core-thumbbutton
 '***************************************************************************************************
-Public Property Let SetProperty_THUMBBUTTON(Optional ButtonIndex = 1, Optional IconPath As String, Optional IconIndex As Long, Optional ButtonType As THUMBBUTTONFLAGS, Optional Description As String, ProcedureName As String)
+Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optional IconPath As String, Optional IconIndex As Long, Optional ButtonType As THUMBBUTTONFLAGS, Optional Description As String, ButtonIndex As Long)
     '範囲外なら、エラーで、止める
     If ButtonIndex < 1 Or ButtonIndex > MAX_BUTTONS Then
         Err.Raise vbObjectError + ErrorValue_範囲外THUMBBUTTON, ErrorNAme_範囲外THUMBBUTTON, "ボタンインデックスは 1 ～ 7 にしてください。"
@@ -108,7 +108,7 @@ Public Property Let SetProperty_THUMBBUTTON(Optional ButtonIndex = 1, Optional I
             .Description = Description
             .IconIndex = IconIndex
             .IconPath = IconPath
-            .ProcedureName = ProcedureName
+            .ProcedureAddress = ProcedureAddress
         End With
     End If
 End Property
@@ -152,7 +152,7 @@ End Property
 Private Function UseDLL_THUMBBUTTON(Target As THUMBBUTTON) As THUMBBUTTONDATA
     With UseDLL_THUMBBUTTON
         '文字列に関するパラメーター　LongPtrを使うことで、ポインタから文字列を取得するようにします。
-        .ProcedureName = StrPtr(Target.ProcedureName)
+        .ProcedureName = 0
         .IconPath = StrPtr(Target.IconPath)
         .Description = StrPtr(Target.Description)
         
@@ -192,10 +192,7 @@ End Property
 '---------------------------------------------------------------------------------------------------
 '* 注意事項：事前に、「SetProperty_THUMBBUTTON」で定義情報を用意しておくこと
 '***************************************************************************************************
-Public Property Let UpdateButton(Optional hwnd As LongPtr, ButtonIndex As Long)
-    '未指定ならExcelApplicationを指定
-    If hwnd = 0 Then hwnd = Application.hwnd
-    
+Public Property Let UpdateButton(ButtonIndex As Long)
     'DLL内の関数を実行
-    UpdateThumbnailButton UseDLL_THUMBBUTTON(SettingTHUMBBUTTON(ButtonIndex)), hwnd
+    UpdateThumbnailButton UseDLL_THUMBBUTTON(SettingTHUMBBUTTON(ButtonIndex)), SettingTHUMBBUTTON(ButtonIndex).ProcedureAddress
 End Property
