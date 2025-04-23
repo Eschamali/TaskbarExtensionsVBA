@@ -71,7 +71,6 @@ End Type
 
 'DLL向け構造体作成
 Private Type THUMBBUTTONDATA
-    ProcedureName       As LongPtr  '実行するプロシージャ名のポインタ形式
     IconPath            As LongPtr  'ボタン制御コード
     Description         As LongPtr  'アイコンのパス
     ButtonType          As Long     'アイコンインデックス
@@ -152,7 +151,6 @@ End Property
 Private Function UseDLL_THUMBBUTTON(Target As THUMBBUTTON) As THUMBBUTTONDATA
     With UseDLL_THUMBBUTTON
         '文字列に関するパラメーター　LongPtrを使うことで、ポインタから文字列を取得するようにします。
-        .ProcedureName = 0
         .IconPath = StrPtr(Target.IconPath)
         .Description = StrPtr(Target.Description)
         

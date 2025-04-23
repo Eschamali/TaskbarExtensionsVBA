@@ -28,7 +28,6 @@ typedef void(__stdcall* VbaCallback)();
 #pragma pack(4)
 struct THUMBBUTTONDATA
 {
-    const wchar_t* ProcedureName;
     const wchar_t* IconPath;
     const wchar_t* Description;
     LONG ButtonType;
