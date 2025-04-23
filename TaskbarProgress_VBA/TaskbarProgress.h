@@ -5,7 +5,10 @@
 #include <winrt/base.h>							//WindowsRT APIベース
 #include <winrt/Windows.UI.Notifications.h>		//WindowsRT APIの通知関連
 #include <winrt/Windows.Data.Xml.Dom.h>			//WindowsRT APIのxml操作関連
-#pragma comment(lib, "comctl32.lib")
+#include <atlbase.h>                            //Excelインスタンス制御関連
+#include <comdef.h>                             //デバッグによるエラーチェック用
+#pragma comment(lib, "comctl32.lib")            //サブクラス関連
+
 
 //外部参照設定つまりはVBAからでもアクセスできるようにする設定。おまじないと思ってください。
 //詳細→https://liclog.net/vba-dll-create-1/
@@ -14,6 +17,7 @@
 #else
 #define TaskbarProgressVBA_API __declspec(dllimport)
 #endif
+
 
 // 構造体で、定義します。
 // ※VBA側で、シグネチャ（型や順序）が合うようにすること。例外として、BOOLはlongで渡さないと上手くいきません
