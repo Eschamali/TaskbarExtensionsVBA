@@ -99,7 +99,7 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
     }
 
     //他のイベントは、既定の処理へ
-    return DefWindowProc(hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 
