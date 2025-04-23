@@ -18,8 +18,10 @@
 #define TaskbarProgressVBA_API __declspec(dllimport)
 #endif
 
-//
+
+//関数ポインタの型を定義し、VBA内のプロシージャ名を呼び出せるようにする
 typedef void(__stdcall* VbaCallback)();
+
 
 // 構造体で、定義します。
 // ※VBA側で、シグネチャ（型や順序）が合うようにすること。例外として、BOOLはlongで渡さないと上手くいきません
@@ -41,4 +43,4 @@ extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarProgress(HWND hwnd, u
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description);
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID);
 extern "C" TaskbarProgressVBA_API void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd);
-extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, HWND hwnd);
+extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);
