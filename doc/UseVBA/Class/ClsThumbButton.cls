@@ -93,6 +93,7 @@ End Type
 '            iconIndex          複数アイコンがある場合の、Index値。
 '            description        ボタンにカーソルを当てた際のツールチップ
 '---------------------------------------------------------------------------------------------------
+'* 注意事項 ：アドレスで、プロシージャ情報を渡してる都合上、その処理を変えたら再度、「UpdateThumbnailButton」で更新する必要があります
 '* URL      ：https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ns-shobjidl_core-thumbbutton
 '***************************************************************************************************
 Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optional IconPath As String, Optional IconIndex As Long, Optional ButtonType As THUMBBUTTONFLAGS, Optional Description As String, ButtonIndex As Long)
@@ -100,7 +101,7 @@ Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optiona
     If ButtonIndex < 1 Or ButtonIndex > MAX_BUTTONS Then
         Err.Raise vbObjectError + ErrorValue_範囲外THUMBBUTTON, ErrorNAme_範囲外THUMBBUTTON, "ボタンインデックスは 1 ～ 7 にしてください。"
     Else
-        '範囲内なら、設定する
+        '範囲内なら、設定する。
         With SettingTHUMBBUTTON(ButtonIndex)
             .ButtonIndex = ButtonIndex
             .ButtonType = ButtonType
@@ -117,7 +118,8 @@ End Property
 '---------------------------------------------------------------------------------------------------
 '* 引数　　：ButtonIndex        リセットしたいボタンインデックス
 '---------------------------------------------------------------------------------------------------
-'* 注意事項：ButtonIndex を 0(False) で渡すと、ALL リセットします
+'* 注意事項：・ButtonIndex を 0(False) で渡すと、ALL リセットします
+'*           ・非表示ボタンとしてクリアします
 '***************************************************************************************************
 Public Property Let ClearProperty_THUMBBUTTON(ButtonIndex As Long)
     '範囲外なら、エラーで、止める
@@ -126,11 +128,11 @@ Public Property Let ClearProperty_THUMBBUTTON(ButtonIndex As Long)
     ElseIf ButtonIndex = 0 Then
         '0の場合は、ALL Reset
         For ButtonIndex = 1 To MAX_BUTTONS
-            SetProperty_THUMBBUTTON(ButtonIndex, vbNullString, 0, THBF_HIDDEN, vbNullString) = vbNullString
+            SetProperty_THUMBBUTTON(0, vbNullString, 0, THBF_HIDDEN, vbNullString) = ButtonIndex
         Next
     Else
         '範囲内なら、設定する
-        SetProperty_THUMBBUTTON(ButtonIndex, vbNullString, 0, THBF_HIDDEN, vbNullString) = vbNullString
+        SetProperty_THUMBBUTTON(0, vbNullString, 0, THBF_HIDDEN, vbNullString) = ButtonIndex
     End If
 End Property
 
