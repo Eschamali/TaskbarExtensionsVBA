@@ -112,7 +112,7 @@ void ExecuteVBAProcByIndex(int index) {
     VARIANTARG arg;
     VariantInit(&arg);
     //　実行マクロ名を設定
-    _bstr_t procName(g_procNames[index].c_str());
+    _bstr_t procName(macroName);
     //　パラメーターの仕様を定義
     arg.vt = VT_BSTR;
     arg.bstrVal = procName;
