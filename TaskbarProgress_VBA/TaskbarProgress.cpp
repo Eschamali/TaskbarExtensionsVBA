@@ -275,27 +275,15 @@ void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserMode
 //***************************************************************************************************
 //* 機能　　 ： 指定したウィンドウハンドルにボタン情報を確保します。
 //---------------------------------------------------------------------------------------------------
-//* 引数　 　： buttonCount     確保するボタン数
-//              hwnd            ウィンドウハンドル
+//* 引数　 　： hwnd            ウィンドウハンドル
 //---------------------------------------------------------------------------------------------------
-//* 注意事項 ： 非表示として確保するので、この処理だけでは見た目上、何も起こりません
+//* 詳細説明 ： 上限である7個の非表示ボタンを作ります。以降の設定変更等は、「UpdateThumbnailButton」で
+//* 注意事項 ： ・非表示として確保するので、この処理だけでは見た目上、何も起こりません
+//              ・実行中のウィンドウハンドルで、1回のみ呼び出すこと。複数の呼び出しは、予期せぬ挙動を招きます。
 //***************************************************************************************************
-void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
+void __stdcall InitializeThumbnailButton(HWND hwnd) {
     //初期化処理
     EnsureTaskbarInterface();
-
-    //0以下で渡されたら、ボタン自体を削除し、処理終了
-    if (buttonCount <= 0) {
-        memset(g_btns, 0, sizeof(g_btns));
-        g_taskbar->ThumbBarAddButtons(hwnd, 0, nullptr);
-
-        //サブクラス化、解除
-        RemoveWindowSubclass;
-        return;
-    }
-
-    //上限を超えてたら、何もしない
-    if (buttonCount > MAX_BUTTONS) return;
 
     //非表示として、ボタン情報を確保する
     for (int i = 0; i < MAX_BUTTONS; ++i) {
@@ -307,7 +295,7 @@ void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
     }
 
     //反映処理
-    g_taskbar->ThumbBarAddButtons(hwnd, buttonCount, g_btns);
+    g_taskbar->ThumbBarAddButtons(hwnd, MAX_BUTTONS, g_btns);
 
     // HWND を保持
     g_hwnd = hwnd;

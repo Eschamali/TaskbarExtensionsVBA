@@ -37,7 +37,7 @@ Public Enum THUMBBUTTONFLAGS
   THBF_DISMISSONCLICK           'ボタンをクリックされると、タスク バー ボタンのポップアップがすぐに閉じます。連続押下を防止できます
   THBF_NOBACKGROUND = 4         'ボタンの境界線をなくします
   THBF_HIDDEN = 8               'ボタン自体を非表示します。UPDATEで、再度表示可能です
-  THBF_NONINTERACTIVE = 16      '対話型にしません。
+  THBF_NONINTERACTIVE = 16      '押されたボタンの状態は描画されません。
 End Enum
 
 
@@ -168,25 +168,23 @@ End Function
 '***************************************************************************************************
 '* 機能    ：指定ハンドルに、THUMBBUTTON 構造体を埋め込みます
 '---------------------------------------------------------------------------------------------------
-'* 引数　　：MakeButtonNum      確保するボタン数
-'            hwnd               ウィンドウハンドル
+'* 引数　　：WindowHwnd               ウィンドウハンドル
 '---------------------------------------------------------------------------------------------------
 '* 注意事項：・非表示として確保するためこれだけでは見た目上、何も起こりません
 '            ・MakeButtonNum を 0 で渡すと、定義自体を削除します
 '***************************************************************************************************
-Public Property Let InstallationButton(Optional hwnd As LongPtr, MakeButtonNum As Long)
+Public Property Let InstallationButton(WindowHwnd As LongPtr)
     '未指定ならExcelApplicationを指定
-    If hwnd = 0 Then hwnd = Application.hwnd
+    If WindowHwnd = 0 Then WindowHwnd = Application.hwnd
     
     'DLL内の関数を実行
-    InitializeThumbnailButton MakeButtonNum, hwnd
+    InitializeThumbnailButton WindowHwnd
 End Property
 
 '***************************************************************************************************
 '* 機能    ：指定ボタンIndexに対して、変更を加えます
 '---------------------------------------------------------------------------------------------------
 '* 引数　　：ButtonIndex    ボタン位置
-'            hwnd           ウィンドウハンドル
 '---------------------------------------------------------------------------------------------------
 '* 注意事項：事前に、「SetProperty_THUMBBUTTON」で定義情報を用意しておくこと
 '***************************************************************************************************
