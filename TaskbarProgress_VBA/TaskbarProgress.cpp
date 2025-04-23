@@ -433,3 +433,69 @@ void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback ca
     //変更を適用
     g_taskbar->ThumbBarUpdateButtons(g_hwnd, MAX_BUTTONS, g_btns);
 }
+
+//***************************************************************************************************
+//* 機能　　 ： 高度なジャンプリストを作成します
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　： RegistrationData     ユーザー定義型：JumpListData
+//***************************************************************************************************
+void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
+{
+    HRESULT hr;
+    ICustomDestinationList* pDestList = nullptr;
+    IObjectCollection* pTasks = nullptr;
+    IShellLinkW* pLink = nullptr;
+
+    hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) return;
+
+    hr = CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&pDestList));
+    if (FAILED(hr)) goto Cleanup;
+
+    hr = pDestList->SetAppID(RegistrationData->ApplicationModelUserID);
+    if (FAILED(hr)) goto Cleanup;
+
+    UINT cMinSlots;
+    IObjectArray* poaRemoved;
+    hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
+    if (FAILED(hr)) goto Cleanup;
+
+    hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&pTasks));
+    if (FAILED(hr)) goto Cleanup;
+
+    // タスクリンク作成
+    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&pLink));
+    if (FAILED(hr)) goto Cleanup;
+
+    pLink->SetPath(RegistrationData->cmdLine);  // 実行するコマンド
+    pLink->SetIconLocation(RegistrationData->iconPath, RegistrationData->IconIndex);  // アイコン設定
+    pLink->SetDescription(RegistrationData->taskName);
+
+    IPropertyStore* pPropStore;
+    hr = pLink->QueryInterface(IID_PPV_ARGS(&pPropStore));
+    if (SUCCEEDED(hr)) {
+        PROPVARIANT prop;
+        InitPropVariantFromString(RegistrationData->taskName, &prop);
+        pPropStore->SetValue(PKEY_Title, prop);
+
+        pPropStore->Commit();
+        PropVariantClear(&prop);
+        pPropStore->Release();
+    }
+
+    pTasks->AddObject(pLink);
+
+    // ジャンプリスト登録
+    pDestList->AppendCategory(RegistrationData->categoryName, pTasks);
+    pDestList->CommitList();
+
+Cleanup:
+    if (pLink) pLink->Release();
+    if (pTasks) pTasks->Release();
+    if (pDestList) pDestList->Release();
+    CoUninitialize();
+    return ;
+}

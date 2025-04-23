@@ -1,16 +1,21 @@
 ﻿#pragma once									//おまじない
 
 //必要なライブラリ等を読み込む
-#include <windows.h>
-#include <gdiplus.h>
+#include <windows.h>                            //WindowsAPI全般
+#include <gdiplus.h>                            //内部でアイコン描画
 #include <shobjidl.h>							//ITaskbarList3に使用
 #include <winrt/base.h>							//WindowsRT APIベース
 #include <winrt/Windows.UI.Notifications.h>		//WindowsRT APIの通知関連
 #include <winrt/Windows.Data.Xml.Dom.h>			//WindowsRT APIのxml操作関連
 #include <atlbase.h>                            //Excelインスタンス制御関連
 #include <comdef.h>                             //デバッグによるエラーチェック用
+#include <shlguid.h>   // IID_IShellLink
+#include <objbase.h>   // CoInitializeEx
+#include <propvarutil.h> // InitPropVariantFromString
+#include <propkey.h>
+#include <strsafe.h>
 #pragma comment(lib, "comctl32.lib")            //サブクラス関連
-#pragma comment(lib, "gdiplus.lib")
+#pragma comment(lib, "gdiplus.lib")             //内部でアイコン描画
 
 //外部参照設定つまりはVBAからでもアクセスできるようにする設定。おまじないと思ってください。
 //詳細→https://liclog.net/vba-dll-create-1/
@@ -36,6 +41,16 @@ struct THUMBBUTTONDATA
     LONG IconIndex;
     LONG ButtonIndex;
 };
+
+struct JumpListData
+{
+    const wchar_t* categoryName;
+    const wchar_t* taskName;
+    const wchar_t* cmdLine;
+    const wchar_t* iconPath;
+    const wchar_t* ApplicationModelUserID;
+    LONG IconIndex;
+};
 #pragma pack()
 
 
@@ -46,3 +61,4 @@ extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadge(int badg
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd);
 extern "C" TaskbarProgressVBA_API void __stdcall InitializeThumbnailButton(HWND hwnd);
 extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);
+extern "C" TaskbarProgressVBA_API void __stdcall Registration_Jumplist(const JumpListData* RegistrationData);
