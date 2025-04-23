@@ -1,26 +1,28 @@
-#pragma once									//‚¨‚Ü‚¶‚È‚¢
+ï»¿#pragma once									//ãŠã¾ã˜ãªã„
 
-//•K—v‚Èƒ‰ƒCƒuƒ‰ƒŠ“™‚ğ“Ç‚İ‚Ş
-#include <shobjidl.h>							//ITaskbarList3‚Ég—p
-#include <winrt/base.h>							//WindowsRT APIƒx[ƒX
-#include <winrt/Windows.UI.Notifications.h>		//WindowsRT API‚Ì’Ê’mŠÖ˜A
-#include <winrt/Windows.Data.Xml.Dom.h>			//WindowsRT API‚Ìxml‘€ìŠÖ˜A
-#include <atlbase.h>                            //ExcelƒCƒ“ƒXƒ^ƒ“ƒX§ŒäŠÖ˜A
-#include <comdef.h>                             //ƒfƒoƒbƒO‚É‚æ‚éƒGƒ‰[ƒ`ƒFƒbƒN—p
-#pragma comment(lib, "comctl32.lib")            //ƒTƒuƒNƒ‰ƒXŠÖ˜A
+//å¿…è¦ãªãƒ©ã‚¤ãƒ–ãƒ©ãƒªç­‰ã‚’èª­ã¿è¾¼ã‚€
+#include <shobjidl.h>							//ITaskbarList3ã«ä½¿ç”¨
+#include <winrt/base.h>							//WindowsRT APIãƒ™ãƒ¼ã‚¹
+#include <winrt/Windows.UI.Notifications.h>		//WindowsRT APIã®é€šçŸ¥é–¢é€£
+#include <winrt/Windows.Data.Xml.Dom.h>			//WindowsRT APIã®xmlæ“ä½œé–¢é€£
+#include <atlbase.h>                            //Excelã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹åˆ¶å¾¡é–¢é€£
+#include <comdef.h>                             //ãƒ‡ãƒãƒƒã‚°ã«ã‚ˆã‚‹ã‚¨ãƒ©ãƒ¼ãƒã‚§ãƒƒã‚¯ç”¨
+#pragma comment(lib, "comctl32.lib")            //ã‚µãƒ–ã‚¯ãƒ©ã‚¹é–¢é€£
 
 
-//ŠO•”QÆİ’è‚Â‚Ü‚è‚ÍVBA‚©‚ç‚Å‚àƒAƒNƒZƒX‚Å‚«‚é‚æ‚¤‚É‚·‚éİ’èB‚¨‚Ü‚¶‚È‚¢‚Æv‚Á‚Ä‚­‚¾‚³‚¢B
-//Ú×¨https://liclog.net/vba-dll-create-1/
+//å¤–éƒ¨å‚ç…§è¨­å®šã¤ã¾ã‚Šã¯VBAã‹ã‚‰ã§ã‚‚ã‚¢ã‚¯ã‚»ã‚¹ã§ãã‚‹ã‚ˆã†ã«ã™ã‚‹è¨­å®šã€‚ãŠã¾ã˜ãªã„ã¨æ€ã£ã¦ãã ã•ã„ã€‚
+//è©³ç´°â†’https://liclog.net/vba-dll-create-1/
 #ifdef TaskbarProgressVBA_EXPORTS
 #define TaskbarProgressVBA_API __declspec(dllexport)
 #else
 #define TaskbarProgressVBA_API __declspec(dllimport)
 #endif
 
+//
+typedef void(__stdcall* VbaCallback)();
 
-// \‘¢‘Ì‚ÅA’è‹`‚µ‚Ü‚·B
-// ¦VBA‘¤‚ÅAƒVƒOƒlƒ`ƒƒiŒ^‚â‡˜j‚ª‡‚¤‚æ‚¤‚É‚·‚é‚±‚ÆB—áŠO‚Æ‚µ‚ÄABOOL‚Ílong‚Å“n‚³‚È‚¢‚Æãè‚­‚¢‚«‚Ü‚¹‚ñ
+// æ§‹é€ ä½“ã§ã€å®šç¾©ã—ã¾ã™ã€‚
+// â€»VBAå´ã§ã€ã‚·ã‚°ãƒãƒãƒ£ï¼ˆå‹ã‚„é †åºï¼‰ãŒåˆã†ã‚ˆã†ã«ã™ã‚‹ã“ã¨ã€‚ä¾‹å¤–ã¨ã—ã¦ã€BOOLã¯longã§æ¸¡ã•ãªã„ã¨ä¸Šæ‰‹ãã„ãã¾ã›ã‚“
 #pragma pack(4)
 struct THUMBBUTTONDATA
 {
@@ -34,7 +36,7 @@ struct THUMBBUTTONDATA
 #pragma pack()
 
 
-//VBA‚Åˆµ‚¢‚½‚¢ŠÖ”‚ğéŒ¾
+//VBAã§æ‰±ã„ãŸã„é–¢æ•°ã‚’å®£è¨€
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status);
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description);
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID);

@@ -1,7 +1,7 @@
-//�ݒ肪�܂Ƃ܂��Ă�w�b�_�[�t�@�C�����w��
+﻿//設定がまとまってるヘッダーファイルを指定
 #include "TaskbarProgress.h" 
 
-//�悭�g�����O��`��p�ӂ���
+//よく使う名前定義を用意する
 using namespace winrt;
 using namespace winrt::Windows::UI::Notifications;
 using namespace winrt::Windows::Data::Xml::Dom;
@@ -9,26 +9,26 @@ using namespace winrt::Windows::Data::Xml::Dom;
 
 
 //***************************************************************************************************
-//                           ������ ThumbButtonInfo �N���X ���������� ������
+//                           ■■■ ThumbButtonInfo クラス を扱う準備 ■■■
 //***************************************************************************************************
-#define MAX_BUTTONS 7                           //�z�u�\�ȃ{�^���̏����
-#define ButtonID_Correction 1001                //�{�^��ID�̍̔ԊJ�n�ԍ�
+#define MAX_BUTTONS 7                           //配置可能なボタンの上限数
+#define ButtonID_Correction 1001                //ボタンIDの採番開始番号
 
-static ITaskbarList3* g_taskbar = nullptr;      //ITaskbarList3�I�u�W�F�N�g
-static THUMBBUTTON g_btns[MAX_BUTTONS] = {};    //�{�^�����i�[�p
-static std::wstring g_procNames[MAX_BUTTONS];   //�R�[���o�b�N�p�v���V�[�W�����̊i�[�p
+static ITaskbarList3* g_taskbar = nullptr;      //ITaskbarList3オブジェクト
+static THUMBBUTTON g_btns[MAX_BUTTONS] = {};    //ボタン情報格納用
+static std::wstring g_procNames[MAX_BUTTONS];   //コールバック用プロシージャ名の格納用
 
 
 
 //***************************************************************************************************
-//                                 ������ �����̃w���p�[�֐� ������
+//                                 ■■■ 内部のヘルパー関数 ■■■
 //***************************************************************************************************
-//* �@�\�@�@ �F�����Ńo�b�W���ɕϊ�����֐�
+//* 機能　　 ：内部でバッジ名に変換する関数
 //---------------------------------------------------------------------------------------------------
-//* �����@�@ �FbadgeValue    �C�ӂ̐���
-//* �Ԃ�l�@ �F�����̐��l�ɉ������o�b�W��
+//* 引数　　 ：badgeValue    任意の整数
+//* 返り値　 ：引数の数値に応じたバッジ名
 //---------------------------------------------------------------------------------------------------
-//* URL      �Fhttps://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges
+//* URL      ：https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges
 //***************************************************************************************************
 static std::wstring GetBadgeValueString(int badgeValue)
 {
@@ -52,7 +52,7 @@ static std::wstring GetBadgeValueString(int badgeValue)
 }
 
 //***************************************************************************************************
-//* �@�\�@�@ �F�^�X�N�o�[�̃{�^��UI�����w���p�[
+//* 機能　　 ：タスクバーのボタンUI準備ヘルパー
 //***************************************************************************************************
 void EnsureTaskbarInterface() {
     if (!g_taskbar) {
@@ -63,31 +63,31 @@ void EnsureTaskbarInterface() {
 }
 
 //***************************************************************************************************
-//* �@�\�@�@ �F�����ɂ���v���V�[�W�����ŁAVBA �}�N�������s���܂�
+//* 機能　　 ：引数にあるプロシージャ名で、VBA マクロを実行します
 //---------------------------------------------------------------------------------------------------
-//* �����@ �@�FIndex     �v���V�[�W����������Index�l
+//* 引数　 　：Index     プロシージャ名があるIndex値
 //***************************************************************************************************
 void ExecuteVBAProcByIndex(int index) {
-    //�v���V�[�W�������o�^���邢�́A�C���f�b�N�X�͈̔͊O�Ȃ�A�����ŏI��
+    //プロシージャ名未登録あるいは、インデックスの範囲外なら、ここで終了
     if (index < 0 || index >= 7 || g_procNames[index].empty()) return;
 
-    //�ڍ׃��b�Z�[�W�A�擾�p(For Debug)
+    //詳細メッセージ、取得用(For Debug)
     EXCEPINFO excepInfo;
-    memset(&excepInfo, 0, sizeof(EXCEPINFO));  // ������
+    memset(&excepInfo, 0, sizeof(EXCEPINFO));  // 初期化
 
-    // 1. Excel��CLSID���擾
+    // 1. ExcelのCLSIDを取得
     CLSID clsid;
     HRESULT hr = CLSIDFromProgID(L"Excel.Application", &clsid);
-    // ���炭�AExcel���C���X�g�[������ĂȂ��ꍇ
+    // 恐らく、Excelがインストールされてない場合
     if (FAILED(hr)) {
         MessageBoxW(nullptr, L"Failed to get CLSID for Excel", L"Error", MB_OK);
         return;
     }
 
-    // 2. ������Excel�C���X�^���X���擾
+    // 2. 既存のExcelインスタンスを取得
     IDispatch* pExcelApp = nullptr;
     hr = GetActiveObject(clsid, nullptr, (IUnknown**)&pExcelApp);
-    // �N������Excel���Ȃ��ꍇ
+    // 起動中のExcelがない場合
     if (FAILED(hr) || !pExcelApp) {
         MessageBoxW(nullptr, L"Failed to get active Excel instance", L"Error", MB_OK);
 
@@ -95,47 +95,62 @@ void ExecuteVBAProcByIndex(int index) {
         return;
     }
 
-    // 3. �u Run ���\�b�h�v��DISPID�̎擾
+    // 3. 「 OnTime メソッド」のDISPIDの取得
+    // →.Runだと、「ユーザーセッションのUIコンテキストでしか動けない」というCOMの制限があるため、.OnTime で、制限回避します
     DISPID dispid;
-    OLECHAR* name = const_cast<OLECHAR*>(L"Run");  // ���s���郁�\�b�h��(VBA��Application.Run ����)
+    OLECHAR* name = const_cast<OLECHAR*>(L"OnTime");  // 実行するメソッド名(VBAのApplication.Run 相当)
     hr = pExcelApp->GetIDsOfNames(IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispid);
-    //Run���\�b�h�̎擾�Ɏ��s�����ꍇ
+    //OnTime メソッドの取得に失敗した場合
     if (FAILED(hr)) {
-        MessageBoxW(nullptr, L"Failed to get DISPID for Run method", L"Error", MB_OK);
+        MessageBoxW(nullptr, L"Failed to get DISPID for OnTime method", L"Error", MB_OK);
         return;
     }
 
-    // 4. Application.Run ���\�b�h�̈�����ݒ�B
-    CComVariant macroName(g_procNames[index].c_str());  //���s�������}�N��(�v���V�[�W��)��
-    //�@������
-    DISPPARAMS params = {};
-    VARIANTARG arg;
-    VariantInit(&arg);
-    //�@���s�}�N������ݒ�
-    _bstr_t procName(macroName);
-    //�@�p�����[�^�[�̎d�l���`
-    arg.vt = VT_BSTR;
-    arg.bstrVal = procName;
-    params.rgvarg = &arg;
-    params.cArgs = 1;
 
-    // 5. �}�N���̌Ăяo��
+    // --- 引数構築: OnTime Now, "マクロ名" ---   s
+    VARIANTARG args[2];
+    VariantInit(&args[0]);
+    VariantInit(&args[1]);
+
+    // 第1引数: 時刻 (Now + 2s)
+    SYSTEMTIME st;
+    GetSystemTime(&st);
+    double nowDate;
+    SystemTimeToVariantTime(&st, &nowDate);
+
+    // → 2秒後にずらす
+    nowDate += (10.0 / 86400.0);  // 1日は86400秒
+
+    args[1].vt = VT_DATE;
+    args[1].date = nowDate;
+
+    // 第2引数: マクロ名（例: "ibento.xlsm!OnThumbButtonClick1"）
+    args[0].vt = VT_BSTR;
+    args[0].bstrVal = SysAllocString(g_procNames[index].c_str());
+
+    DISPPARAMS params = {};
+    params.rgvarg = args;
+    params.cArgs = 2;
+
+    // --- 呼び出し ---
     CComVariant result;
     hr = pExcelApp->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, &result, &excepInfo, nullptr);
 
-    //-------------�ȍ~�́A�f�o�b�O�p-------------
-    // ���݂�Excel�C���X�^���X���ɁA�w��}�N�����Ȃ��Ƒz��
+
+
+    //-------------以降は、デバッグ用-------------
+    // 現在のExcelインスタンス内に、指定マクロがないと想定
     if (FAILED(hr)) {
         MessageBoxW(nullptr, L"Failed to get Excel macro", L"Error", MB_OK);
     }
 
-    //MessageBox��DISPPARAMS�̓��e���m�F
+    //MessageBoxでDISPPARAMSの内容を確認
     std::wstring debugMessage;
 
-    // cArgs�̊m�F
+    // cArgsの確認
     debugMessage += L"Number of arguments: " + std::to_wstring(params.cArgs) + L"\n";
 
-    // rgvarg �̒��g�𕶎���
+    // rgvarg の中身を文字列化
     for (UINT i = 0; i < params.cArgs; ++i) {
         VARIANT& arg = params.rgvarg[i];
 
@@ -147,16 +162,16 @@ void ExecuteVBAProcByIndex(int index) {
         }
     }
 
-    // rgvarg �̒��g���m�F
+    // rgvarg の中身を確認
     MessageBoxW(nullptr, debugMessage.c_str(), L"DISPPARAMS Debug", MB_OK);
 
-     //�G���[���N��������A�G���[�R�[�h�Əڍ׃��b�Z�[�W(����ꍇ)��\���B
+     //エラーが起こったら、エラーコードと詳細メッセージ(ある場合)を表示。
     if (FAILED(hr)) {
         std::wstring errorMessage = L"Invoke failed. HRESULT: " + std::to_wstring(hr);
 
         if (excepInfo.bstrDescription) {
             errorMessage += L"\nException: " + std::wstring(excepInfo.bstrDescription);
-            SysFreeString(excepInfo.bstrDescription);  // ���\�[�X���
+            SysFreeString(excepInfo.bstrDescription);  // リソース解放
         }
 
         MessageBoxW(nullptr, errorMessage.c_str(), L"Error1", MB_OK);
@@ -166,98 +181,99 @@ void ExecuteVBAProcByIndex(int index) {
         MessageBoxW(nullptr, err.ErrorMessage(), L"Info", MB_OK);
     }
 
-    //-------------�����܂ł��A�f�o�b�O�p-------------
+    //-------------ここまでが、デバッグ用-------------
 
-    //��n��
+    //後始末
     pExcelApp->Release();
     CoUninitialize();
+    SysFreeString(args[0].bstrVal);
 }
 
 //***************************************************************************************************
-//* �@�\�@�@ �F���O�ɐݒ肵�� hwnd �ɋN�������Ƃ��A�S�������ɓ͂��܂��B
+//* 機能　　 ：事前に設定した hwnd に起きたことが、全部ここに届きます。
 //---------------------------------------------------------------------------------------------------
-//* �����@ �@�Fhwnd      ���b�Z�[�W���󂯎�����E�B���h�E�̃n���h��(�T�u�N���X�ɓo�^����hwnd)
-//             msg       ���b�Z�[�W�̎�ށBExcel�Ō����A�C�x���g�̎�ނł��i��FWM_COMMAND, WM_PAINT, WM_CLOSE �Ȃǁj
-//             wParam    ���b�Z�[�W�ɂ���ĈӖ����قȂ�⏕�f�[�^�@����1
-//             lParam    ���b�Z�[�W�ɂ���ĈӖ����قȂ�⏕�f�[�^�@����2
+//* 引数　 　：hwnd      メッセージを受け取ったウィンドウのハンドル(サブクラスに登録したhwnd)
+//             msg       メッセージの種類。Excelで言う、イベントの種類です（例：WM_COMMAND, WM_PAINT, WM_CLOSE など）
+//             wParam    メッセージによって意味が異なる補助データ　その1
+//             lParam    メッセージによって意味が異なる補助データ　その2
 //---------------------------------------------------------------------------------------------------
-//* �@�\���� �FExcel�Ō����A�S�C�x���g�����������ɏW�񂳂�Ă�C���[�W�ł��B�C�x���g���Ƃ̏����́ASwitch�������₷���ł��B
+//* 機能説明 ：Excelで言う、全イベント処理がここに集約されてるイメージです。イベントごとの処理は、Switch文がやりやすいです。
 //***************************************************************************************************
 LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
-    //switch���ŁA�C�x���g���ƂɁu��肽�������v������
+    //switch文で、イベントごとに「やりたい処理」を書く
     switch (msg)
     {
-        //�^�X�N�o�[�̃T���l�C���{�^�����N���b�N����ƁAWindows �� WM_COMMAND ���b�Z�[�W�𑗂��Ă��܂��B
+        //タスクバーのサムネイルボタンをクリックすると、Windows は WM_COMMAND メッセージを送ってきます。
         case WM_COMMAND:
-            //���̃C�x���g�̓{�^�����N���b�N���ꂽ�ʒm�����肵�܂�(����� THBN_CLICKED �ƂȂ�)
+            //このイベントはボタンがクリックされた通知か判定します(今回は THBN_CLICKED となる)
             if (HIWORD(wParam) == THBN_CLICKED) {
-                //�␳����
+                //補正処理
                 int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
 
-                //VBA���̃v���V�[�W���������s���鏀����
+                //VBA内のプロシージャ名を実行する準備へ
                 ExecuteVBAProcByIndex(buttonIndex);
                 return 0;
             }
 
             break;
 
-        //���̃C�x���g�́A�������܂���
+        //他のイベントは、何もしません
         default:
             break;
     }
 
-    //���̃C�x���g�́A����̏�����
+    //他のイベントは、既定の処理へ
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
 
 
 //***************************************************************************************************
-//                                 ������ VBA����g�p����֐� ������
+//                                 ■■■ VBAから使用する関数 ■■■
 //***************************************************************************************************
-//* �@�\�@�@ �F�w��A�v���n���h���̃^�X�N�o�[�ɁA�v���O���X�o�[�̒l�ƃX�e�[�^�X���w�肵�܂��B
+//* 機能　　 ：指定アプリハンドルのタスクバーに、プログレスバーの値とステータスを指定します。
 //---------------------------------------------------------------------------------------------------
-//* �����@ �@�F�Ehwnd     �^�X�N�o�[��K�p������n���h��
-//             �Ecurrent  ���ݒl
-//             �Emaximum  �ő�l
-//             �Estatus�@ ���l�ɂ���āA�F�ύX�A�s�m��ɂł��܂��B
+//* 引数　 　：・hwnd     タスクバーを適用させるハンドル
+//             ・current  現在値
+//             ・maximum  最大値
+//             ・status　 数値によって、色変更、不確定にできます。
 //***************************************************************************************************
 void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status)
 {
-	// ITaskbarList3�C���^�[�t�F�[�X���擾
+	// ITaskbarList3インターフェースを取得
 	ITaskbarList3* pTaskbarList = nullptr;
 	HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
 	if (FAILED(hr)) {
 		return;
 	}
 
-	// �^�X�N�o�[�̐i����Ԃ�ݒ�
+	// タスクバーの進捗状態を設定
 	pTaskbarList->SetProgressState(hwnd, static_cast<TBPFLAG>(status));
 
-	// �i���l��ݒ�
+	// 進捗値を設定
 	if (status == TBPF_NORMAL || status == TBPF_PAUSED || status == TBPF_ERROR) {
 		pTaskbarList->SetProgressValue(hwnd, current, maximum);
 	}
 
-	// ���\�[�X�̉��
+	// リソースの解放
 	pTaskbarList->Release();
 
 }
 
 //***************************************************************************************************
-//* �@�\�@�@ �F�w��A�v���n���h���̃^�X�N �o�[ �{�^���ɃI�[�o�[���C��K�p���āA�A�v���P�[�V�����̏�Ԃ܂��͒ʒm�����[�U�[�Ɏ����܂��B
+//* 機能　　 ：指定アプリハンドルのタスク バー ボタンにオーバーレイを適用して、アプリケーションの状態または通知をユーザーに示します。
 //---------------------------------------------------------------------------------------------------
-//* �����@ �@�F�Ehwnd        �^�X�N�o�[��K�p������n���h��
-//             �EfilePath    �A�C�R�����܂ރt�@�C���t���p�X
-//             �EiconIndex   dll���̃A�C�R���Z�b�g��ǂݍ��񂾍ۂ́A�ǂݍ��݈ʒu
-//             �Edescription �A�N�Z�V�r���e�B����������
+//* 引数　 　：・hwnd        タスクバーを適用させるハンドル
+//             ・filePath    アイコンを含むファイルフルパス
+//             ・iconIndex   dll等のアイコンセットを読み込んだ際の、読み込み位置
+//             ・description アクセシビリティ向け説明文
 //---------------------------------------------------------------------------------------------------
-//* �@�\���� �F�I�[�o�[���C�̍폜�ɂ́AiconIndex �� -1 �ȉ��ɂ��܂��B
+//* 機能説明 ：オーバーレイの削除には、iconIndex を -1 以下にします。
 //***************************************************************************************************
 void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description)
 {
-    // ITaskbarList3�C���^�[�t�F�[�X���擾
+    // ITaskbarList3インターフェースを取得
     ITaskbarList3* pTaskbarList = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
     if (FAILED(hr)) {
@@ -265,7 +281,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         return;
     }
 
-    // iconIndex��0�����̏ꍇ�A�A�C�R�����폜����
+    // iconIndexが0未満の場合、アイコンを削除する
     if (iconIndex < 0) {
         hr = pTaskbarList->SetOverlayIcon(hwnd, NULL, NULL);
         if (FAILED(hr)) {
@@ -280,7 +296,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
     std::wstring extension = path.substr(path.find_last_of(L".") + 1);
 
     if (extension == L"ico") {
-        // .ico�t�@�C������A�C�R�������[�h
+        // .icoファイルからアイコンをロード
         hIcon = (HICON)LoadImage(NULL, filePath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE | LR_SHARED);
         if (hIcon == NULL) {
             MessageBoxW(nullptr, L"Failed to load .ico file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
@@ -289,7 +305,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         }
     }
     else if (extension == L"exe") {
-        // .exe�t�@�C������A�C�R�����C���f�b�N�X�w��Ń��[�h
+        // .exeファイルからアイコンをインデックス指定でロード
         hIcon = ExtractIcon(NULL, filePath, iconIndex);
         if (hIcon == NULL || hIcon == (HICON)1) {
             MessageBoxW(nullptr, L"Failed to extract icon from .exe file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
@@ -298,7 +314,7 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         }
     }
     else if (extension == L"dll") {
-        // .dll�t�@�C������A�C�R�����C���f�b�N�X�w��Ń��[�h
+        // .dllファイルからアイコンをインデックス指定でロード
         HMODULE hModule = LoadLibraryEx(filePath, NULL, LOAD_LIBRARY_AS_DATAFILE);
         if (hModule == NULL) {
             MessageBoxW(nullptr, L"Failed to load .dll file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
@@ -322,91 +338,91 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         return;
     }
 
-    // �^�X�N�o�[�ɃI�[�o�[���C�A�C�R����ݒ�
+    // タスクバーにオーバーレイアイコンを設定
     hr = pTaskbarList->SetOverlayIcon(hwnd, hIcon, description);
     if (FAILED(hr)) {
         MessageBoxW(nullptr, L"Failed to set overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
     }
 
-    // �A�C�R�������
+    // アイコンを解放
     DestroyIcon(hIcon);
 
-    // ���\�[�X�̉��
+    // リソースの解放
     pTaskbarList->Release();
 }
 
 //***************************************************************************************************
-//* �@�\�@�@ �F�w��A�v��ID�̃^�X�N �o�[ �{�^���ɃI�[�o�[���C��K�p���āA�A�v���P�[�V�����̏�Ԃ܂��͒ʒm�����[�U�[�Ɏ����܂�
+//* 機能　　 ：指定アプリIDのタスク バー ボタンにオーバーレイを適用して、アプリケーションの状態または通知をユーザーに示します
 //---------------------------------------------------------------------------------------------------
-//* �����@ �@�F�EbadgeValue        �^�X�N�o�[��K�p������n���h��
-//             �EappUserModelID    appUserModelID
+//* 引数　 　：・badgeValue        タスクバーを適用させるハンドル
+//             ・appUserModelID    appUserModelID
 //---------------------------------------------------------------------------------------------------
-//* �@�\���� �F�A�v���n���h���ł͂Ȃ��AappUserModelID �Ŏw�肷��p�^�[���ł��B
-//* ���ӎ��� �F�EWinRT API���̂���OS���K�v�ł�
-//             �E�����_�ł́A�f�X�N�g�b�v�A�v���ɑ΂��Ă͌��ʂ���܂���B
+//* 機能説明 ：アプリハンドルではなく、appUserModelID で指定するパターンです。
+//* 注意事項 ：・WinRT API環境のあるOSが必要です
+//             ・現時点では、デスクトップアプリに対しては効果ありません。
 //***************************************************************************************************
 void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID)
 {
-    // COM�̏�����
+    // COMの初期化
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (hr == RPC_E_CHANGED_MODE) {
-        // ���ɈقȂ�A�p�[�g�����g ���[�h�ŏ���������Ă���ꍇ�́A���̂܂ܑ��s
+        // 既に異なるアパートメント モードで初期化されている場合は、そのまま続行
     }
     else if (FAILED(hr)) {
         wchar_t errorMsg[256];
-        swprintf_s(errorMsg, 256, L"COM�������Ɏ��s���܂����BHRESULT: 0x%08X", hr);
-        MessageBoxW(nullptr, errorMsg, L"�G���[", MB_OK | MB_ICONERROR);
+        swprintf_s(errorMsg, 256, L"COM初期化に失敗しました。HRESULT: 0x%08X", hr);
+        MessageBoxW(nullptr, errorMsg, L"エラー", MB_OK | MB_ICONERROR);
         return;
     }
 
     try {
-        // �o�b�W�̒l�𕶎���ɕϊ�
+        // バッジの値を文字列に変換
         std::wstring badgeValueStr = GetBadgeValueString(badgeValue);
         std::wstring xmlString = L"<badge value=\"" + badgeValueStr + L"\"/>";
 
-        // XML�̓ǂݍ���
+        // XMLの読み込み
         XmlDocument doc;
         doc.LoadXml(winrt::hstring(xmlString));
 
-        // �o�b�W�ʒm�I�u�W�F�N�g�̍쐬
+        // バッジ通知オブジェクトの作成
         BadgeNotification badge(doc);
 
-        // �w�肵��AppID�̒ʒm�}�l�[�W�����擾
+        // 指定したAppIDの通知マネージャを取得
         auto notifier = BadgeUpdateManager::CreateBadgeUpdaterForApplication(winrt::hstring(appUserModelID));
         notifier.Update(badge);
     }
     catch (...) {
-        // �G���[����
-        MessageBoxW(nullptr, L"�o�b�W�ʒm�̕\���Ɏ��s���܂����B", L"Badge Error", MB_OK | MB_ICONERROR);
+        // エラー処理
+        MessageBoxW(nullptr, L"バッジ通知の表示に失敗しました。", L"Badge Error", MB_OK | MB_ICONERROR);
     }
 }
 
 //***************************************************************************************************
-//* �@�\�@�@ �F �w�肵���E�B���h�E�n���h���Ƀ{�^�������m�ۂ��܂��B
+//* 機能　　 ： 指定したウィンドウハンドルにボタン情報を確保します。
 //---------------------------------------------------------------------------------------------------
-//* �����@ �@�F buttonCount     �m�ۂ���{�^����
-//              hwnd            �E�B���h�E�n���h��
+//* 引数　 　： buttonCount     確保するボタン数
+//              hwnd            ウィンドウハンドル
 //---------------------------------------------------------------------------------------------------
-//* ���ӎ��� �F ��\���Ƃ��Ċm�ۂ���̂ŁA���̏��������ł͌����ڏ�A�����N����܂���
+//* 注意事項 ： 非表示として確保するので、この処理だけでは見た目上、何も起こりません
 //***************************************************************************************************
 void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
-    //����������
+    //初期化処理
     EnsureTaskbarInterface();
 
-    //0�ȉ��œn���ꂽ��A�{�^�����̂��폜���A�����I��
+    //0以下で渡されたら、ボタン自体を削除し、処理終了
     if (buttonCount <= 0) {
         memset(g_btns, 0, sizeof(g_btns));
         g_taskbar->ThumbBarAddButtons(hwnd, 0, nullptr);
 
-        //�T�u�N���X���A����
+        //サブクラス化、解除
         RemoveWindowSubclass;
         return;
     }
 
-    //����𒴂��Ă���A�������Ȃ�
+    //上限を超えてたら、何もしない
     if (buttonCount > MAX_BUTTONS) return;
 
-    //��\���Ƃ��āA�{�^�������m�ۂ���
+    //非表示として、ボタン情報を確保する
     for (int i = 0; i < MAX_BUTTONS; ++i) {
         g_btns[i].dwMask = THB_FLAGS;
         g_btns[i].dwFlags = THBF_HIDDEN;
@@ -415,51 +431,51 @@ void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
         g_btns[i].szTip[0] = L'\0';
     }
 
-    //���f����
+    //反映処理
     g_taskbar->ThumbBarAddButtons(hwnd, buttonCount, g_btns);
 
-    // �Ώۂ̃E�B���h�E�n���h��(hwnd)���T�u�N���X�����āA�l�X�ȃC�x���g�����ɑΉ�������
+    // 対象のウィンドウハンドル(hwnd)をサブクラス化して、様々なイベント処理に対応させる
     SetWindowSubclass(hwnd, SubclassProc, 1, 0);
 }
 
 //***************************************************************************************************
-//* �@�\�@�@ �F �w�肵���E�B���h�E�n���h���Ƀ{�^������ύX���܂��B
+//* 機能　　 ： 指定したウィンドウハンドルにボタン情報を変更します。
 //---------------------------------------------------------------------------------------------------
-//* �����@ �@�F data     ���[�U�[��`�^�FTHUMBBUTTONDATA
-//              hwnd     �E�B���h�E�n���h��
+//* 引数　 　： data     ユーザー定義型：THUMBBUTTONDATA
+//              hwnd     ウィンドウハンドル
 //---------------------------------------------------------------------------------------------------
-//* ���ӎ��� �F ��\���Ƃ��Ċm�ۂ���̂ŁA���̏��������ł͌����ڏ�A�����N����܂���
+//* 注意事項 ： 非表示として確保するので、この処理だけでは見た目上、何も起こりません
 //***************************************************************************************************
 void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, HWND hwnd) {
-    //������
+    //初期化
     EnsureTaskbarInterface();
 
-    //�͈͊O�̃{�^��ID�Ȃ�A�������Ȃ�
+    //範囲外のボタンIDなら、何もしない
     if (!data || data->ButtonIndex  < 0 + ButtonID_Correction || data->ButtonIndex  >= MAX_BUTTONS + ButtonID_Correction) return;
 
-    //�w��{�^��ID�ɑ΂��āA�ǂ�ȗL���ȃf�[�^���܂܂�Ă��邩�`����
+    //指定ボタンIDに対して、どんな有効なデータが含まれているか伝える
     THUMBBUTTON& btn = g_btns[data->ButtonIndex - ButtonID_Correction];
-    btn.iId = data->ButtonIndex;                        //�c�[�� �o�[���ň�ӂ̃{�^���̃A�v���P�[�V������`���ʎq�B�O�ׁ̈A1001���獏��
-    btn.dwMask = THB_FLAGS | THB_ICON | THB_TOOLTIP;    //�����o�[�ɗL���ȃf�[�^���܂܂�Ă��邩���w�肷�� THUMBBUTTONMASK �l�̑g�ݍ��킹�Bhttps://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ne-shobjidl_core-thumbbuttonmask
-    btn.dwFlags = (THUMBBUTTONFLAGS)data->ButtonType;   //THUMBBUTTON �ɂ���āA�{�^���̓���̏�ԂƓ���𐧌䂷��
+    btn.iId = data->ButtonIndex;                        //ツール バー内で一意のボタンのアプリケーション定義識別子。念の為、1001から刻む
+    btn.dwMask = THB_FLAGS | THB_ICON | THB_TOOLTIP;    //メンバーに有効なデータが含まれているかを指定する THUMBBUTTONMASK 値の組み合わせ。https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ne-shobjidl_core-thumbbuttonmask
+    btn.dwFlags = (THUMBBUTTONFLAGS)data->ButtonType;   //THUMBBUTTON によって、ボタンの特定の状態と動作を制御する
 
-    // �c�[���`�b�v
+    // ツールチップ
     if (data->Description) {
         wcsncpy_s(btn.szTip, data->Description, ARRAYSIZE(btn.szTip));
     }
 
-    // �A�C�R��
+    // アイコン
     HICON hIcon = NULL;
     if (data->IconPath) {
         ExtractIconExW(data->IconPath, data->IconIndex, NULL, &hIcon, 1);
     }
     btn.hIcon = hIcon;
 
-    // �R�[���o�b�N�p�Ƀv���V�[�W������ێ�
+    // コールバック用にプロシージャ名を保持
     if (data->ProcedureName) {
         g_procNames[data->ButtonIndex - ButtonID_Correction] = data->ProcedureName;
     }
 
-    //�ύX��K�p
+    //変更を適用
     g_taskbar->ThumbBarUpdateButtons(hwnd, MAX_BUTTONS, g_btns);
 }
