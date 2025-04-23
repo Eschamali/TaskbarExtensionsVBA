@@ -68,23 +68,109 @@ void EnsureTaskbarInterface() {
 //* 引数　 　：Index     プロシージャ名があるIndex値
 //***************************************************************************************************
 void ExecuteVBAProcByIndex(int index) {
+    //プロシージャ名未登録あるいは、インデックスの範囲外なら、ここで終了
     if (index < 0 || index >= 7 || g_procNames[index].empty()) return;
 
+    //詳細メッセージ、取得用(For Debug)
+    EXCEPINFO excepInfo;
+    memset(&excepInfo, 0, sizeof(EXCEPINFO));  // 初期化
+
+    // 1. ExcelのCLSIDを取得
     CLSID clsid;
-    CLSIDFromProgID(L"Excel.Application", &clsid);
-
-    IDispatch* pExcel = nullptr;
-    if (FAILED(GetActiveObject(clsid, nullptr, (IUnknown**)&pExcel))) return;
-
-    DISPID dispid;
-    LPOLESTR macroName = (LPOLESTR)g_procNames[index].c_str();
-
-    if (SUCCEEDED(pExcel->GetIDsOfNames(IID_NULL, &macroName, 1, LOCALE_USER_DEFAULT, &dispid))) {
-        DISPPARAMS params = { nullptr, nullptr, 0, 0 };
-        pExcel->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, nullptr, nullptr, nullptr);
+    HRESULT hr = CLSIDFromProgID(L"Excel.Application", &clsid);
+    // 恐らく、Excelがインストールされてない場合
+    if (FAILED(hr)) {
+        MessageBoxW(nullptr, L"Failed to get CLSID for Excel", L"Error", MB_OK);
+        return;
     }
 
-    pExcel->Release();
+    // 2. 既存のExcelインスタンスを取得
+    IDispatch* pExcelApp = nullptr;
+    hr = GetActiveObject(clsid, nullptr, (IUnknown**)&pExcelApp);
+    // 起動中のExcelがない場合
+    if (FAILED(hr) || !pExcelApp) {
+        MessageBoxW(nullptr, L"Failed to get active Excel instance", L"Error", MB_OK);
+
+        CoUninitialize();
+        return;
+    }
+
+    // 3. 「 Run メソッド」のDISPIDの取得
+    DISPID dispid;
+    OLECHAR* name = const_cast<OLECHAR*>(L"Run");  // 実行するメソッド名(VBAのApplication.Run 相当)
+    hr = pExcelApp->GetIDsOfNames(IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispid);
+    //Runメソッドの取得に失敗した場合
+    if (FAILED(hr)) {
+        MessageBoxW(nullptr, L"Failed to get DISPID for Run method", L"Error", MB_OK);
+        return;
+    }
+
+    // 4. Application.Run メソッドの引数を設定。
+    CComVariant macroName(g_procNames[index].c_str());  //実行したいマクロ(プロシージャ)名
+    //　初期化
+    DISPPARAMS params = {};
+    VARIANTARG arg;
+    VariantInit(&arg);
+    //　実行マクロ名を設定
+    _bstr_t procName(g_procNames[index].c_str());
+    //　パラメーターの仕様を定義
+    arg.vt = VT_BSTR;
+    arg.bstrVal = procName;
+    params.rgvarg = &arg;
+    params.cArgs = 1;
+
+    // 5. マクロの呼び出し
+    CComVariant result;
+    hr = pExcelApp->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, &result, &excepInfo, nullptr);
+
+    //-------------以降は、デバッグ用-------------
+    // 現在のExcelインスタンス内に、指定マクロがないと想定
+    if (FAILED(hr)) {
+        MessageBoxW(nullptr, L"Failed to get Excel macro", L"Error", MB_OK);
+    }
+
+    //MessageBoxでDISPPARAMSの内容を確認
+    std::wstring debugMessage;
+
+    // cArgsの確認
+    debugMessage += L"Number of arguments: " + std::to_wstring(params.cArgs) + L"\n";
+
+    // rgvarg の中身を文字列化
+    for (UINT i = 0; i < params.cArgs; ++i) {
+        VARIANT& arg = params.rgvarg[i];
+
+        if (arg.vt == VT_BSTR) {
+            debugMessage += L"Argument " + std::to_wstring(i) + L": " + arg.bstrVal + L"\n";
+        }
+        else {
+            debugMessage += L"Argument " + std::to_wstring(i) + L": [not a BSTR]\n";
+        }
+    }
+
+    // rgvarg の中身を確認
+    MessageBoxW(nullptr, debugMessage.c_str(), L"DISPPARAMS Debug", MB_OK);
+
+     //エラーが起こったら、エラーコードと詳細メッセージ(ある場合)を表示。
+    if (FAILED(hr)) {
+        std::wstring errorMessage = L"Invoke failed. HRESULT: " + std::to_wstring(hr);
+
+        if (excepInfo.bstrDescription) {
+            errorMessage += L"\nException: " + std::wstring(excepInfo.bstrDescription);
+            SysFreeString(excepInfo.bstrDescription);  // リソース解放
+        }
+
+        MessageBoxW(nullptr, errorMessage.c_str(), L"Error1", MB_OK);
+    }
+    else {
+        _com_error err(hr);
+        MessageBoxW(nullptr, err.ErrorMessage(), L"Info", MB_OK);
+    }
+
+    //-------------ここまでが、デバッグ用-------------
+
+    //後始末
+    pExcelApp->Release();
+    CoUninitialize();
 }
 
 //***************************************************************************************************
@@ -108,8 +194,6 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
             if (HIWORD(wParam) == THBN_CLICKED) {
                 //補正処理
                 int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
-                std::wstring msg = L"ボタンインデックス: " + std::to_wstring(buttonIndex);
-                MessageBoxW(nullptr, msg.c_str(), L"Call back OK!", MB_OK | MB_ICONINFORMATION);
 
                 //VBA内のプロシージャ名を実行する準備へ
                 ExecuteVBAProcByIndex(buttonIndex);
