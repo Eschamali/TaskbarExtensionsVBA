@@ -11,12 +11,14 @@ using namespace winrt::Windows::Data::Xml::Dom;
 //***************************************************************************************************
 //                           ■■■ ThumbButtonInfo クラス を扱う準備 ■■■
 //***************************************************************************************************
-#define MAX_BUTTONS 7                           //配置可能なボタンの上限数
-#define ButtonID_Correction 1001                //ボタンIDの採番開始番号
+#define MAX_BUTTONS 7                                                   //配置可能なボタンの上限数
+#define ButtonID_Correction 1001                                        //ボタンIDの採番開始番号
 
-static ITaskbarList3* g_taskbar = nullptr;      //ITaskbarList3オブジェクト
-static THUMBBUTTON g_btns[MAX_BUTTONS] = {};    //ボタン情報格納用
-static std::wstring g_procNames[MAX_BUTTONS];   //コールバック用プロシージャ名の格納用
+static ITaskbarList3* g_taskbar = nullptr;                              //ITaskbarList3オブジェクト
+static THUMBBUTTON g_btns[MAX_BUTTONS] = {};                            //ボタン情報格納用
+static std::wstring g_procNames[MAX_BUTTONS];                           //コールバック用プロシージャ名の格納用
+static HWND g_hwnd = nullptr;                                           //InitializeThumbnailButton で呼び出したウィンドウハンドルを保持します
+static VbaCallback g_thumbButtonCallbacks[MAX_BUTTONS] = { nullptr };   // 各ボタン用の関数(VBA内プロシージャ)ポインタを7つ保持
 
 
 
@@ -63,133 +65,6 @@ void EnsureTaskbarInterface() {
 }
 
 //***************************************************************************************************
-//* 機能　　 ：引数にあるプロシージャ名で、VBA マクロを実行します
-//---------------------------------------------------------------------------------------------------
-//* 引数　 　：Index     プロシージャ名があるIndex値
-//***************************************************************************************************
-void ExecuteVBAProcByIndex(int index) {
-    //プロシージャ名未登録あるいは、インデックスの範囲外なら、ここで終了
-    if (index < 0 || index >= 7 || g_procNames[index].empty()) return;
-
-    //詳細メッセージ、取得用(For Debug)
-    EXCEPINFO excepInfo;
-    memset(&excepInfo, 0, sizeof(EXCEPINFO));  // 初期化
-
-    // 1. ExcelのCLSIDを取得
-    CLSID clsid;
-    HRESULT hr = CLSIDFromProgID(L"Excel.Application", &clsid);
-    // 恐らく、Excelがインストールされてない場合
-    if (FAILED(hr)) {
-        MessageBoxW(nullptr, L"Failed to get CLSID for Excel", L"Error", MB_OK);
-        return;
-    }
-
-    // 2. 既存のExcelインスタンスを取得
-    IDispatch* pExcelApp = nullptr;
-    hr = GetActiveObject(clsid, nullptr, (IUnknown**)&pExcelApp);
-    // 起動中のExcelがない場合
-    if (FAILED(hr) || !pExcelApp) {
-        MessageBoxW(nullptr, L"Failed to get active Excel instance", L"Error", MB_OK);
-
-        CoUninitialize();
-        return;
-    }
-
-    // 3. 「 OnTime メソッド」のDISPIDの取得
-    // →.Runだと、「ユーザーセッションのUIコンテキストでしか動けない」というCOMの制限があるため、.OnTime で、制限回避します
-    DISPID dispid;
-    OLECHAR* name = const_cast<OLECHAR*>(L"OnTime");  // 実行するメソッド名(VBAのApplication.Run 相当)
-    hr = pExcelApp->GetIDsOfNames(IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispid);
-    //OnTime メソッドの取得に失敗した場合
-    if (FAILED(hr)) {
-        MessageBoxW(nullptr, L"Failed to get DISPID for OnTime method", L"Error", MB_OK);
-        return;
-    }
-
-
-    // --- 引数構築: OnTime Now, "マクロ名" ---   s
-    VARIANTARG args[2];
-    VariantInit(&args[0]);
-    VariantInit(&args[1]);
-
-    // 第1引数: 時刻 (Now + 2s)
-    SYSTEMTIME st;
-    GetSystemTime(&st);
-    double nowDate;
-    SystemTimeToVariantTime(&st, &nowDate);
-
-    // → 2秒後にずらす
-    nowDate += (10.0 / 86400.0);  // 1日は86400秒
-
-    args[1].vt = VT_DATE;
-    args[1].date = nowDate;
-
-    // 第2引数: マクロ名（例: "ibento.xlsm!OnThumbButtonClick1"）
-    args[0].vt = VT_BSTR;
-    args[0].bstrVal = SysAllocString(g_procNames[index].c_str());
-
-    DISPPARAMS params = {};
-    params.rgvarg = args;
-    params.cArgs = 2;
-
-    // --- 呼び出し ---
-    CComVariant result;
-    hr = pExcelApp->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &params, &result, &excepInfo, nullptr);
-
-
-
-    //-------------以降は、デバッグ用-------------
-    // 現在のExcelインスタンス内に、指定マクロがないと想定
-    if (FAILED(hr)) {
-        MessageBoxW(nullptr, L"Failed to get Excel macro", L"Error", MB_OK);
-    }
-
-    //MessageBoxでDISPPARAMSの内容を確認
-    std::wstring debugMessage;
-
-    // cArgsの確認
-    debugMessage += L"Number of arguments: " + std::to_wstring(params.cArgs) + L"\n";
-
-    // rgvarg の中身を文字列化
-    for (UINT i = 0; i < params.cArgs; ++i) {
-        VARIANT& arg = params.rgvarg[i];
-
-        if (arg.vt == VT_BSTR) {
-            debugMessage += L"Argument " + std::to_wstring(i) + L": " + arg.bstrVal + L"\n";
-        }
-        else {
-            debugMessage += L"Argument " + std::to_wstring(i) + L": [not a BSTR]\n";
-        }
-    }
-
-    // rgvarg の中身を確認
-    MessageBoxW(nullptr, debugMessage.c_str(), L"DISPPARAMS Debug", MB_OK);
-
-     //エラーが起こったら、エラーコードと詳細メッセージ(ある場合)を表示。
-    if (FAILED(hr)) {
-        std::wstring errorMessage = L"Invoke failed. HRESULT: " + std::to_wstring(hr);
-
-        if (excepInfo.bstrDescription) {
-            errorMessage += L"\nException: " + std::wstring(excepInfo.bstrDescription);
-            SysFreeString(excepInfo.bstrDescription);  // リソース解放
-        }
-
-        MessageBoxW(nullptr, errorMessage.c_str(), L"Error1", MB_OK);
-    }
-    else {
-        _com_error err(hr);
-        MessageBoxW(nullptr, err.ErrorMessage(), L"Info", MB_OK);
-    }
-
-    //-------------ここまでが、デバッグ用-------------
-
-    //後始末
-    pExcelApp->Release();
-    CoUninitialize();
-    SysFreeString(args[0].bstrVal);
-}
-
-//***************************************************************************************************
 //* 機能　　 ：事前に設定した hwnd に起きたことが、全部ここに届きます。
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　：hwnd      メッセージを受け取ったウィンドウのハンドル(サブクラスに登録したhwnd)
@@ -211,8 +86,8 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                 //補正処理
                 int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
 
-                //VBA内のプロシージャ名を実行する準備へ
-                ExecuteVBAProcByIndex(buttonIndex);
+                //VBA内のプロシージャ名のポインタを直接実行する
+                g_thumbButtonCallbacks[buttonIndex]();
                 return 0;
             }
 
@@ -434,6 +309,9 @@ void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
     //反映処理
     g_taskbar->ThumbBarAddButtons(hwnd, buttonCount, g_btns);
 
+    // HWND を保持
+    g_hwnd = hwnd;
+
     // 対象のウィンドウハンドル(hwnd)をサブクラス化して、様々なイベント処理に対応させる
     SetWindowSubclass(hwnd, SubclassProc, 1, 0);
 }
@@ -442,11 +320,9 @@ void __stdcall InitializeThumbnailButton(LONG buttonCount, HWND hwnd) {
 //* 機能　　 ： 指定したウィンドウハンドルにボタン情報を変更します。
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　： data     ユーザー定義型：THUMBBUTTONDATA
-//              hwnd     ウィンドウハンドル
-//---------------------------------------------------------------------------------------------------
-//* 注意事項 ： 非表示として確保するので、この処理だけでは見た目上、何も起こりません
+//              callback 呼び出すVBA内のプロシージャ名のポインタ
 //***************************************************************************************************
-void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, HWND hwnd) {
+void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback) {
     //初期化
     EnsureTaskbarInterface();
 
@@ -471,11 +347,9 @@ void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, HWND hwnd) {
     }
     btn.hIcon = hIcon;
 
-    // コールバック用にプロシージャ名を保持
-    if (data->ProcedureName) {
-        g_procNames[data->ButtonIndex - ButtonID_Correction] = data->ProcedureName;
-    }
+    // コールバック用にプロシージャ名のポインタを保持
+    g_thumbButtonCallbacks[data->ButtonIndex - ButtonID_Correction] = callback;
 
     //変更を適用
-    g_taskbar->ThumbBarUpdateButtons(hwnd, MAX_BUTTONS, g_btns);
+    g_taskbar->ThumbBarUpdateButtons(g_hwnd, MAX_BUTTONS, g_btns);
 }
