@@ -5,6 +5,7 @@
 using namespace winrt;
 using namespace winrt::Windows::UI::Notifications;
 using namespace winrt::Windows::Data::Xml::Dom;
+using namespace Gdiplus;
 
 
 
@@ -56,7 +57,8 @@ static std::wstring GetBadgeValueString(int badgeValue)
 //***************************************************************************************************
 //* 機能　　 ：タスクバーのボタンUI準備ヘルパー
 //***************************************************************************************************
-void EnsureTaskbarInterface() {
+void EnsureTaskbarInterface()
+{
     if (!g_taskbar) {
         CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
         CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_taskbar));
@@ -100,6 +102,60 @@ LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
 
     //他のイベントは、既定の処理へ
     return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+//***************************************************************************************************
+//* 機能　　 ：Win32アプリ用、通知バッチアイコンを作成します
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：number    描画する数字。99を超える場合、"99+"と表示します
+//---------------------------------------------------------------------------------------------------
+//* 詳細説明 ：
+//***************************************************************************************************
+HICON CreateBadgeIcon(int number)
+{
+    // GDI+ 初期化
+    static bool initialized = false;
+    static GdiplusStartupInput gdiplusStartupInput;
+    static ULONG_PTR gdiplusToken;
+    if (!initialized) {
+        GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
+        initialized = true;
+    }
+
+    // 描画サイズ（アイコンサイズ）
+    const int size = 32;
+    Bitmap bmp(size, size, PixelFormat32bppARGB);
+    Graphics g(&bmp);
+
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+    g.Clear(Color(0, 0, 0, 0)); // 透明背景
+
+    // 赤い円
+    SolidBrush redBrush(Color(255, 255, 0, 0)); // 赤
+    g.FillEllipse(&redBrush, 0, 0, size, size);
+
+    // 白文字
+    WCHAR buf[4];
+    if (number <= 99)
+        wsprintf(buf, L"%d", number);
+    else
+        lstrcpyW(buf, L"99+");
+
+    FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::Font font(&fontFamily, 14, FontStyleBold, UnitPixel);
+    SolidBrush whiteBrush(Color(255, 255, 255)); // 白
+
+    RectF layoutRect(0, 0, size, size);
+    StringFormat format;
+    format.SetAlignment(StringAlignmentCenter);
+    format.SetLineAlignment(StringAlignmentCenter);
+
+    g.DrawString(buf, -1, &font, layoutRect, &format, &whiteBrush);
+
+    // アイコンに変換
+    HICON hIcon = nullptr;
+    bmp.GetHICON(&hIcon);
+    return hIcon;
 }
 
 
@@ -273,6 +329,40 @@ void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserMode
 }
 
 //***************************************************************************************************
+//* 機能　　 ：指定アプリハンドルにオーバーレイを適用して、アプリケーションの状態または通知をユーザーに示します
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：・badgeValue        タスクバーを適用させるバッチ
+//             ・hwnd              ウィンドウハンドル
+//---------------------------------------------------------------------------------------------------
+//* 詳細説明 ：SetTaskbarOverlayBadge を win32 アプリでも扱えるようにしたものです
+//* 注意事項 ：仕組みは、SetOverlayIcon + GDI+ でメモリ上にアイコンを描画し、HICONを生成 で実現してます 
+//***************************************************************************************************
+void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd)
+{
+    // ITaskbarList3インターフェースを取得
+    ITaskbarList3* pTaskbarList = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
+    if (FAILED(hr)) {
+        MessageBoxW(nullptr, L"Failed to create ITaskbarList3 instance.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    // iconIndexが0以下の場合、アイコンを削除する
+    if (badgeValue <= 0) {
+        hr = pTaskbarList->SetOverlayIcon(hwnd, NULL, NULL);
+        if (FAILED(hr)) {
+            MessageBoxW(nullptr, L"FFailed to remove overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+        }
+        pTaskbarList->Release();
+        return;
+    }
+
+    //反映
+    HICON icon = CreateBadgeIcon(badgeValue);
+    pTaskbarList->SetOverlayIcon(hwnd, icon,NULL);
+}
+
+//***************************************************************************************************
 //* 機能　　 ： 指定したウィンドウハンドルにボタン情報を確保します。
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　： hwnd            ウィンドウハンドル
@@ -281,7 +371,8 @@ void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserMode
 //* 注意事項 ： ・非表示として確保するので、この処理だけでは見た目上、何も起こりません
 //              ・実行中のウィンドウハンドルで、1回のみ呼び出すこと。複数の呼び出しは、予期せぬ挙動を招きます。
 //***************************************************************************************************
-void __stdcall InitializeThumbnailButton(HWND hwnd) {
+void __stdcall InitializeThumbnailButton(HWND hwnd) 
+{
     //初期化処理
     EnsureTaskbarInterface();
 
@@ -310,7 +401,8 @@ void __stdcall InitializeThumbnailButton(HWND hwnd) {
 //* 引数　 　： data     ユーザー定義型：THUMBBUTTONDATA
 //              callback 呼び出すVBA内のプロシージャ名のポインタ
 //***************************************************************************************************
-void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback) {
+void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback)
+{
     //初期化
     EnsureTaskbarInterface();
 

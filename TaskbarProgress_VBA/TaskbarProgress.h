@@ -1,6 +1,8 @@
 ﻿#pragma once									//おまじない
 
 //必要なライブラリ等を読み込む
+#include <windows.h>
+#include <gdiplus.h>
 #include <shobjidl.h>							//ITaskbarList3に使用
 #include <winrt/base.h>							//WindowsRT APIベース
 #include <winrt/Windows.UI.Notifications.h>		//WindowsRT APIの通知関連
@@ -8,7 +10,7 @@
 #include <atlbase.h>                            //Excelインスタンス制御関連
 #include <comdef.h>                             //デバッグによるエラーチェック用
 #pragma comment(lib, "comctl32.lib")            //サブクラス関連
-
+#pragma comment(lib, "gdiplus.lib")
 
 //外部参照設定つまりはVBAからでもアクセスできるようにする設定。おまじないと思ってください。
 //詳細→https://liclog.net/vba-dll-create-1/
@@ -41,5 +43,6 @@ struct THUMBBUTTONDATA
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status);
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description);
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID);
+extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd);
 extern "C" TaskbarProgressVBA_API void __stdcall InitializeThumbnailButton(HWND hwnd);
 extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);

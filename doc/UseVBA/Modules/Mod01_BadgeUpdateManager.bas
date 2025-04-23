@@ -13,6 +13,7 @@ Option Explicit
 ' 機能     ：C++で書かれたDLLに、 BadgeNotification関連の処理を埋め込ませ、Shell経由より高速に処理できます
 '***************************************************************************************************
 Private Declare PtrSafe Sub SetTaskbarOverlayBadge Lib "TaskbarProgress.dll" (ByVal badgeValue As Long, ByVal appId As LongPtr)
+Private Declare PtrSafe Sub SetTaskbarOverlayBadgeForWin32 Lib "TaskbarProgress.dll" (ByVal badgeValue As Long, ByVal hwnd As LongPtr)
 
 
 
@@ -139,5 +140,21 @@ End Function
 '***************************************************************************************************
 Sub BadgeUpdaterDLL(BadgeID As Long, Optional appId As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel")
     'DLL内の関数を実行
-    Call SetTaskbarOverlayBadge(BadgeID, StrPtr(appId))
+    SetTaskbarOverlayBadge BadgeID, StrPtr(appId)
+End Sub
+
+'***************************************************************************************************
+'* 機能     ：引数に応じたバッジ通知を表示させます。
+'---------------------------------------------------------------------------------------------------
+'* 引数　 　：BadgeID       バッジID(便宜上、数値で扱います。)
+'           ：hwnd          ウィンドウハンドル
+'---------------------------------------------------------------------------------------------------
+'* 機能説明 ：DeskTopアプリでも通知バッチが使えるようにしたものです。
+'***************************************************************************************************
+Sub BadgeUpdaterForWin32(BadgeID As Long, Optional hwnd As LongPtr)
+    '未指定ならExcelApplicationを指定
+    If hwnd = 0 Then hwnd = Application.hwnd
+
+    'DLL内の関数を実行
+    SetTaskbarOverlayBadgeForWin32 BadgeID, hwnd
 End Sub
