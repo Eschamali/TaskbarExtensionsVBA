@@ -502,6 +502,12 @@ void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
         varBoolTrue.vt = VT_BOOL;
         varBoolTrue.boolVal = VARIANT_TRUE;
 
+        //BOOL：FALSE
+        PROPVARIANT varBoolFalse;
+        PropVariantInit(&varBoolFalse);
+        varBoolFalse.vt = VT_BOOL;
+        varBoolFalse.boolVal = VARIANT_FALSE;
+
         //String：タスク名に該当
         PROPVARIANT varTitle;
         InitPropVariantFromString(RegistrationData->taskName, &varTitle);
@@ -509,7 +515,7 @@ void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
 
         //------------------------メタデータを設定/適用-----------------------------
         //URL　https://learn.microsoft.com/ja-jp/windows/win32/properties/software-bumper
-        pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);    //ピン留め、一覧から削除　を効かなくします
+        //pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);    //ピン留め、一覧から削除　を効かなくします
         pPropStore->SetValue(PKEY_Title, varTitle);                             //タスク名を設定します
     
         //適用
