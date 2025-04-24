@@ -526,7 +526,14 @@ void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
     pTasks->AddObject(pLink);
 
     //指定したカテゴリ名称群に、上記で定義した pTasks を入れる 
-    pDestList->AppendCategory(RegistrationData->categoryName, pTasks);
+    if (RegistrationData->categoryName == nullptr || wcslen(RegistrationData->categoryName) == 0) {
+        // カテゴリ名が未指定 → Tasks に追加（ピン留めできない）
+        pDestList->AddUserTasks(pTasks);
+    }
+    else {
+        // カテゴリ名が指定されている → 任意カテゴリ名で追加（ピン留め可能性あり）
+        pDestList->AppendCategory(RegistrationData->categoryName, pTasks);
+    }
 
     //ジャンプリスト登録
     pDestList->CommitList();
