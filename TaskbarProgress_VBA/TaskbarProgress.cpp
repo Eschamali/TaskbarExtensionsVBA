@@ -486,7 +486,8 @@ void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
     if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
     
     //作成したタスクに対して、パラメーターを設定
-    pLink->SetPath(RegistrationData->cmdLine);                                         //実行するコマンド(ショートカットコマンド)
+    pLink->SetPath(RegistrationData->FilePath);                                        //実行パス
+    pLink->SetArguments(RegistrationData->cmdArguments);                               //引数
     pLink->SetIconLocation(RegistrationData->iconPath, RegistrationData->IconIndex);   //アイコン設定
     pLink->SetDescription(RegistrationData->Description);                              //アクセシビリティ用説明文
 

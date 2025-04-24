@@ -43,7 +43,8 @@ struct JumpListData
 {
     const wchar_t* categoryName;
     const wchar_t* taskName;
-    const wchar_t* cmdLine;
+    const wchar_t* FilePath;
+    const wchar_t* cmdArguments;
     const wchar_t* iconPath;
     const wchar_t* Description;
     const wchar_t* ApplicationModelUserID;
