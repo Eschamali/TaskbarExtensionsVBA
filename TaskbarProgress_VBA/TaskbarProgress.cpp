@@ -476,7 +476,6 @@ void __stdcall AddJumpListTask(const JumpListData* data) {
     if (data->cmdArguments) safeData.cmdArguments = data->cmdArguments;
     if (data->iconPath) safeData.iconPath = data->iconPath;
     if (data->Description) safeData.Description = data->Description;
-    if (data->ApplicationModelUserID) safeData.ApplicationModelUserID = data->ApplicationModelUserID;
     safeData.IconIndex = data->IconIndex;
 
     //設定情報を蓄積
@@ -489,7 +488,7 @@ void __stdcall AddJumpListTask(const JumpListData* data) {
 //* 注意事項 ：・空の設定情報のまま実行すると、ジャンプリストの中身をクリアします。
 //             ・設定値に問題(無効な引数等)があった場合、不整合を防ぐため、設定情報をクリアします
 //***************************************************************************************************
-void __stdcall CommitJumpList()
+void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
 {
     //必要な変数を用意→初期化
     HRESULT hr;
@@ -506,10 +505,7 @@ void __stdcall CommitJumpList()
     //-------------------------------------------------------------------------------
 
     //ジャンプリストの設定先の ApplicationModelUserID の設定先を反映
-    if (!g_JumpListEntries.empty() && g_JumpListEntries[0].ApplicationModelUserID.c_str()) {
-        // ApplicationModelUserID があれば設定
-        pDestList->SetAppID(g_JumpListEntries[0].ApplicationModelUserID.c_str());
-    }
+    pDestList->SetAppID(ApplicationModelUserID);
 
     //ジャンプリスト編集のセッションを開始
     UINT cMinSlots;
@@ -521,8 +517,19 @@ void __stdcall CommitJumpList()
     hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTasks));
     if (FAILED(hr)) { CleanupJumpListTask(pDestList, pTasks); return; }
 
+    //カテゴリ名、収集準備
+    std::map<std::wstring, CComPtr<IObjectCollection>> categoryTasks;
+
     //設定情報を読み込む処理へ
     for (const auto& entry : g_JumpListEntries) {
+        // カテゴリ名が未登録なら新規登録
+        if (categoryTasks.find(entry.categoryName) == categoryTasks.end()) {
+            CComPtr<IObjectCollection> pNewCollection;
+            hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pNewCollection));
+            if (FAILED(hr)) continue;
+            categoryTasks[entry.categoryName] = pNewCollection;
+        }
+
         //hellLinkW オブジェクト（ショートカットリンク）を作成。
         hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pLink));
         if (FAILED(hr)) continue;   //ShellLinkW オブジェクト（ショートカットリンク）を生成しようと試みて、もし失敗したらそのエントリの処理をスキップして次のループへ進む
@@ -570,7 +577,7 @@ void __stdcall CommitJumpList()
             pPropStore->Release();
         }
         //指定した「ApplicationModelUserID」(pTasks)に、設定したタスク(pLink->XXX)を入れる。
-        pTasks->AddObject(pLink);
+        categoryTasks[entry.categoryName]->AddObject(pLink);
 
         //用が済んだので解放
         pLink->Release();
@@ -583,16 +590,23 @@ void __stdcall CommitJumpList()
         hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
     }
     else {
-        if (!g_JumpListEntries.empty() && g_JumpListEntries[0].categoryName.empty()) {
-            // カテゴリ名が未指定 → Tasks に追加（ピン留めできない）
-            pDestList->AddUserTasks(pTasks);
-        }
-        else {
-            // カテゴリ名が指定されている → 任意カテゴリ名で追加（ピン留め可能性あり）
-            pDestList->AppendCategory(g_JumpListEntries[0].categoryName.c_str(), pTasks);
+
+        // まとめてジャンプリストに追加
+        for (const auto& [category, tasks] : categoryTasks) {
+            CComPtr<IObjectArray> pObjectArray;
+            hr = tasks->QueryInterface(IID_PPV_ARGS(&pObjectArray));
+            if (FAILED(hr)) continue;
+
+            if (category.empty()) {
+                pDestList->AddUserTasks(pObjectArray);
+            }
+            //カテゴリ名が空のものは AddUserTasks に
+            else {
+                pDestList->AppendCategory(category.c_str(), pObjectArray);
+            }
         }
 
-        //ジャンプリスト登録
+        //ジャンプリスト反映
         pDestList->CommitList();
     }
 

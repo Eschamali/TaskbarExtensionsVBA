@@ -48,7 +48,6 @@ struct JumpListData
     const wchar_t* cmdArguments;
     const wchar_t* iconPath;
     const wchar_t* Description;
-    const wchar_t* ApplicationModelUserID;
     LONG IconIndex;
 };
 #pragma pack()
@@ -62,7 +61,6 @@ struct JumpListDataSafe
     std::wstring cmdArguments;
     std::wstring iconPath;
     std::wstring Description;
-    std::wstring ApplicationModelUserID;
     LONG IconIndex;
 };
 
@@ -75,4 +73,4 @@ extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadgeForWin32(
 extern "C" TaskbarProgressVBA_API void __stdcall InitializeThumbnailButton(HWND hwnd);
 extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);
 extern "C" TaskbarProgressVBA_API void __stdcall AddJumpListTask(const JumpListData* data);
-extern "C" TaskbarProgressVBA_API void __stdcall CommitJumpList();
+extern "C" TaskbarProgressVBA_API void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID);
