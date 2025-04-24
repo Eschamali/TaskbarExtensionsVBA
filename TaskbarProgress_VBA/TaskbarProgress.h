@@ -28,7 +28,7 @@
 typedef void(__stdcall* VbaCallback)();
 
 
-// 構造体で、定義します。
+// VBA→DLLやり取り用ユーザー定義型を定義します。
 // ※VBA側で、シグネチャ（型や順序）が合うようにすること。例外として、BOOLはlongで渡さないと上手くいきません
 #pragma pack(4)
 struct THUMBBUTTONDATA
@@ -52,6 +52,19 @@ struct JumpListData
     LONG IconIndex;
 };
 #pragma pack()
+
+//DLL内 専用構造体
+struct JumpListDataSafe
+{
+    std::wstring categoryName;
+    std::wstring taskName;
+    std::wstring FilePath;
+    std::wstring cmdArguments;
+    std::wstring iconPath;
+    std::wstring Description;
+    std::wstring ApplicationModelUserID;
+    LONG IconIndex;
+};
 
 
 //VBAで扱いたい関数を宣言

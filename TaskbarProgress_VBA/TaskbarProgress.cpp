@@ -26,7 +26,7 @@ static VbaCallback g_thumbButtonCallbacks[MAX_BUTTONS] = { nullptr };   //各ボ
 //***************************************************************************************************
 //              ■■■ ICustomDestinationList クラス を扱う準備(グローバル変数) ■■■
 //***************************************************************************************************
-std::vector<JumpListData> g_JumpListEntries;    //ジャンプリストデータ保持
+std::vector<JumpListDataSafe> g_JumpListEntries;    //ジャンプリストデータ保持
 
 
 
@@ -467,7 +467,20 @@ void CleanupJumpListTask(ICustomDestinationList* pDestList, IObjectCollection* p
 //***************************************************************************************************
 void __stdcall AddJumpListTask(const JumpListData* data) {
     if (data == nullptr) return;
-    g_JumpListEntries.push_back(*data); // データをコピーして保持
+
+    //中身の値そのものをコピー
+    JumpListDataSafe safeData;
+    if (data->categoryName) safeData.categoryName = data->categoryName;
+    if (data->taskName) safeData.taskName = data->taskName;
+    if (data->FilePath) safeData.FilePath = data->FilePath;
+    if (data->cmdArguments) safeData.cmdArguments = data->cmdArguments;
+    if (data->iconPath) safeData.iconPath = data->iconPath;
+    if (data->Description) safeData.Description = data->Description;
+    if (data->ApplicationModelUserID) safeData.ApplicationModelUserID = data->ApplicationModelUserID;
+    safeData.IconIndex = data->IconIndex;
+
+    //設定情報を蓄積
+    g_JumpListEntries.push_back(std::move(safeData));
 }
 
 //***************************************************************************************************
@@ -493,9 +506,9 @@ void __stdcall CommitJumpList()
     //-------------------------------------------------------------------------------
 
     //ジャンプリストの設定先の ApplicationModelUserID の設定先を反映
-    if (!g_JumpListEntries.empty() && g_JumpListEntries[0].ApplicationModelUserID) {
+    if (!g_JumpListEntries.empty() && g_JumpListEntries[0].ApplicationModelUserID.c_str()) {
         // ApplicationModelUserID があれば設定
-        pDestList->SetAppID(g_JumpListEntries[0].ApplicationModelUserID);
+        pDestList->SetAppID(g_JumpListEntries[0].ApplicationModelUserID.c_str());
     }
 
     //ジャンプリスト編集のセッションを開始
@@ -515,10 +528,10 @@ void __stdcall CommitJumpList()
         if (FAILED(hr)) continue;   //ShellLinkW オブジェクト（ショートカットリンク）を生成しようと試みて、もし失敗したらそのエントリの処理をスキップして次のループへ進む
 
         //作成したタスクに対して、パラメーターを設定
-        pLink->SetPath(entry.FilePath);                                                 //実行パス
-        if (entry.cmdArguments) pLink->SetArguments(entry.cmdArguments);                //引数
-        if (entry.iconPath) pLink->SetIconLocation(entry.iconPath, entry.IconIndex);    //アイコン設定
-        if (entry.Description) pLink->SetDescription(entry.Description);                //アクセシビリティ用説明文
+        pLink->SetPath(entry.FilePath.c_str());                                                     //実行パス
+        if (entry.cmdArguments.c_str()) pLink->SetArguments(entry.cmdArguments.c_str());            //引数
+        if (entry.iconPath.c_str()) pLink->SetIconLocation(entry.iconPath.c_str(),entry.IconIndex); //アイコン設定
+        if (entry.Description.c_str()) pLink->SetDescription(entry.Description.c_str());            //アクセシビリティ用説明文
 
         //ジャンプリストに、追加のメタデータ付与制御(ピン留め出来ないようにする等)
         IPropertyStore* pPropStore;
@@ -539,7 +552,7 @@ void __stdcall CommitJumpList()
 
             //String：タスク名に該当
             PROPVARIANT varTitle;
-            InitPropVariantFromString(entry.taskName, &varTitle);
+            InitPropVariantFromString(entry.taskName.c_str(), &varTitle);
             //--------------------------------------------------------------------------
 
             //------------------------メタデータを設定/適用-----------------------------
@@ -570,13 +583,13 @@ void __stdcall CommitJumpList()
         hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
     }
     else {
-        if (g_JumpListEntries[0].categoryName == nullptr || wcslen(g_JumpListEntries[0].categoryName) == 0) {
+        if (!g_JumpListEntries.empty() && g_JumpListEntries[0].categoryName.empty()) {
             // カテゴリ名が未指定 → Tasks に追加（ピン留めできない）
             pDestList->AddUserTasks(pTasks);
         }
         else {
             // カテゴリ名が指定されている → 任意カテゴリ名で追加（ピン留め可能性あり）
-            pDestList->AppendCategory(g_JumpListEntries[0].categoryName, pTasks);
+            pDestList->AppendCategory(g_JumpListEntries[0].categoryName.c_str(), pTasks);
         }
 
         //ジャンプリスト登録
