@@ -435,67 +435,98 @@ void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback ca
 }
 
 //***************************************************************************************************
+//* 機能　　 ： ジャンプリスト制御に使った変数を解放します
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　： ※割愛します
+//***************************************************************************************************
+void Cleanup_Jumplist(ICustomDestinationList* pDestList, IObjectCollection* pTasks, IShellLinkW* pLink){
+    if (pLink) pLink->Release();
+    if (pTasks) pTasks->Release();
+    if (pDestList) pDestList->Release();
+    CoUninitialize();
+}
+
+//***************************************************************************************************
 //* 機能　　 ： 高度なジャンプリストを作成します
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　： RegistrationData     ユーザー定義型：JumpListData
 //***************************************************************************************************
 void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
 {
+    //必要な変数を用意→初期化
     HRESULT hr;
     ICustomDestinationList* pDestList = nullptr;
     IObjectCollection* pTasks = nullptr;
     IShellLinkW* pLink = nullptr;
 
+    //-------------ジャンプリスト関連COMオブジェクトの準備に関わるお作法-------------
     hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) return;
 
-    hr = CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&pDestList));
-    if (FAILED(hr)) goto Cleanup;
+    hr = CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&pDestList));
+    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
+    //-------------------------------------------------------------------------------
 
+    //ジャンプリストの設定先の ApplicationModelUserID の設定先を反映
     hr = pDestList->SetAppID(RegistrationData->ApplicationModelUserID);
-    if (FAILED(hr)) goto Cleanup;
+    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
 
+    //ジャンプリスト編集のセッションを開始
     UINT cMinSlots;
     IObjectArray* poaRemoved;
     hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
-    if (FAILED(hr)) goto Cleanup;
+    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
 
-    hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&pTasks));
-    if (FAILED(hr)) goto Cleanup;
+    //ジャンプリスト登録データ用オブジェクトを用意
+    hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&pTasks));
+    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
 
-    // タスクリンク作成
-    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&pLink));
-    if (FAILED(hr)) goto Cleanup;
+    //タスクリンク作成。
+    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&pLink));
+    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
+    
+    //作成したタスクに対して、パラメーターを設定
+    pLink->SetPath(RegistrationData->cmdLine);                                         //実行するコマンド(ショートカットコマンド)
+    pLink->SetIconLocation(RegistrationData->iconPath, RegistrationData->IconIndex);   //アイコン設定
+    pLink->SetDescription(RegistrationData->Description);                              //アクセシビリティ用説明文
 
-    pLink->SetPath(RegistrationData->cmdLine);  // 実行するコマンド
-    pLink->SetIconLocation(RegistrationData->iconPath, RegistrationData->IconIndex);  // アイコン設定
-    pLink->SetDescription(RegistrationData->taskName);
-
+    //ジャンプリストに、追加のメタデータ付与制御(ピン留め出来ないようにする等)
     IPropertyStore* pPropStore;
     hr = pLink->QueryInterface(IID_PPV_ARGS(&pPropStore));
     if (SUCCEEDED(hr)) {
-        PROPVARIANT prop;
-        InitPropVariantFromString(RegistrationData->taskName, &prop);
-        pPropStore->SetValue(PKEY_Title, prop);
+        //-----------------------PROPVARIANT の 設定値を生成------------------------
+        //BOOL：TRUE
+        PROPVARIANT varBoolTrue;
+        PropVariantInit(&varBoolTrue);
+        varBoolTrue.vt = VT_BOOL;
+        varBoolTrue.boolVal = VARIANT_TRUE;
 
+        //String：タスク名に該当
+        PROPVARIANT varTitle;
+        InitPropVariantFromString(RegistrationData->taskName, &varTitle);
+        //--------------------------------------------------------------------------
+
+        //------------------------メタデータを設定/適用-----------------------------
+        //URL　https://learn.microsoft.com/ja-jp/windows/win32/properties/software-bumper
+        pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);    //ピン留め、一覧から削除　を効かなくします
+        pPropStore->SetValue(PKEY_Title, varTitle);                             //タスク名を設定します
+    
+        //適用
         pPropStore->Commit();
-        PropVariantClear(&prop);
+        //--------------------------------------------------------------------------
+
+        //変数、オブジェクトを解放
+        PropVariantClear(&varTitle);
+        PropVariantClear(&varBoolTrue);
         pPropStore->Release();
     }
 
+    //指定した「ApplicationModelUserID」(pTasks)に、設定したタスク(pLink->XXX)を入れる。
     pTasks->AddObject(pLink);
 
-    // ジャンプリスト登録
+    //指定したカテゴリ名称群に、上記で定義した pTasks を入れる 
     pDestList->AppendCategory(RegistrationData->categoryName, pTasks);
-    pDestList->CommitList();
 
-Cleanup:
-    if (pLink) pLink->Release();
-    if (pTasks) pTasks->Release();
-    if (pDestList) pDestList->Release();
-    CoUninitialize();
-    return ;
+    //ジャンプリスト登録
+    pDestList->CommitList();
 }

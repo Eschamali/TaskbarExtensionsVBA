@@ -9,11 +9,8 @@
 #include <winrt/Windows.Data.Xml.Dom.h>			//WindowsRT APIのxml操作関連
 #include <atlbase.h>                            //Excelインスタンス制御関連
 #include <comdef.h>                             //デバッグによるエラーチェック用
-#include <shlguid.h>   // IID_IShellLink
-#include <objbase.h>   // CoInitializeEx
-#include <propvarutil.h> // InitPropVariantFromString
-#include <propkey.h>
-#include <strsafe.h>
+#include <propkey.h>                            //ジャンプリストの制御パラメーター定数関連
+#include <propvarutil.h>                        //同じ関数で色んな型の値（文字列、数値、ブールなど）を扱うための、汎用型 PROPVARIANT 
 #pragma comment(lib, "comctl32.lib")            //サブクラス関連
 #pragma comment(lib, "gdiplus.lib")             //内部でアイコン描画
 
@@ -48,6 +45,7 @@ struct JumpListData
     const wchar_t* taskName;
     const wchar_t* cmdLine;
     const wchar_t* iconPath;
+    const wchar_t* Description;
     const wchar_t* ApplicationModelUserID;
     LONG IconIndex;
 };
