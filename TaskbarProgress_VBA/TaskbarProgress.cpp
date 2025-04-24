@@ -10,7 +10,7 @@ using namespace Gdiplus;
 
 
 //***************************************************************************************************
-//                           ■■■ ThumbButtonInfo クラス を扱う準備 ■■■
+//                ■■■ ThumbButtonInfo クラス を扱う準備(グローバル変数/定数) ■■■
 //***************************************************************************************************
 #define MAX_BUTTONS 7                                                   //配置可能なボタンの上限数
 #define ButtonID_Correction 1001                                        //ボタンIDの採番開始番号
@@ -19,7 +19,14 @@ static ITaskbarList3* g_taskbar = nullptr;                              //ITaskb
 static THUMBBUTTON g_btns[MAX_BUTTONS] = {};                            //ボタン情報格納用
 static std::wstring g_procNames[MAX_BUTTONS];                           //コールバック用プロシージャ名の格納用
 static HWND g_hwnd = nullptr;                                           //InitializeThumbnailButton で呼び出したウィンドウハンドルを保持します
-static VbaCallback g_thumbButtonCallbacks[MAX_BUTTONS] = { nullptr };   // 各ボタン用の関数(VBA内プロシージャ)ポインタを7つ保持
+static VbaCallback g_thumbButtonCallbacks[MAX_BUTTONS] = { nullptr };   //各ボタン用の関数(VBA内プロシージャ)ポインタを7つ保持
+
+
+
+//***************************************************************************************************
+//              ■■■ ICustomDestinationList クラス を扱う準備(グローバル変数) ■■■
+//***************************************************************************************************
+std::vector<JumpListData> g_JumpListEntries;    //ジャンプリストデータ保持
 
 
 
@@ -434,24 +441,42 @@ void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback ca
     g_taskbar->ThumbBarUpdateButtons(g_hwnd, MAX_BUTTONS, g_btns);
 }
 
+
 //***************************************************************************************************
-//* 機能　　 ： ジャンプリスト制御に使った変数を解放します
+//* 機能　　 ： ジャンプリストに追加した情報を消去します
 //---------------------------------------------------------------------------------------------------
-//* 引数　 　： ※割愛します
+//* 引数　 　： ※割愛
+//---------------------------------------------------------------------------------------------------
+//* 詳細説明 ： ポインタによるクリアなので、問題なし
 //***************************************************************************************************
-void Cleanup_Jumplist(ICustomDestinationList* pDestList, IObjectCollection* pTasks, IShellLinkW* pLink){
-    if (pLink) pLink->Release();
+void CleanupJumpListTask(ICustomDestinationList* pDestList, IObjectCollection* pTasks) {
     if (pTasks) pTasks->Release();
     if (pDestList) pDestList->Release();
+
+    // 蓄積したエントリをクリア
+    g_JumpListEntries.clear();
     CoUninitialize();
 }
 
 //***************************************************************************************************
-//* 機能　　 ： 高度なジャンプリストを作成します
+//* 機能　　 ： ジャンプリストに追加する情報を蓄積します
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　： RegistrationData     ユーザー定義型：JumpListData
+//---------------------------------------------------------------------------------------------------
+//* 詳細説明 ： VBAで、2次元配列を渡すのがほぼ不可能のため、DLL側のグローバル変数を利用して、予め設定情報を2次元配列的に保存していきます
 //***************************************************************************************************
-void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
+void __stdcall AddJumpListTask(const JumpListData* data) {
+    if (data == nullptr) return;
+    g_JumpListEntries.push_back(*data); // データをコピーして保持
+}
+
+//***************************************************************************************************
+//* 機能　　 ： 蓄積されたジャンプリスト情報を元にジャンプリストを作成します
+//---------------------------------------------------------------------------------------------------
+//* 注意事項 ：・空の設定情報のまま実行すると、ジャンプリストの中身をクリアします。
+//             ・設定値に問題(無効な引数等)があった場合、不整合を防ぐため、設定情報をクリアします
+//***************************************************************************************************
+void __stdcall CommitJumpList()
 {
     //必要な変数を用意→初期化
     HRESULT hr;
@@ -463,84 +488,101 @@ void __stdcall Registration_Jumplist(const JumpListData* RegistrationData)
     hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) return;
 
-    hr = CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&pDestList));
-    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
+    hr = CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDestList));
+    if (FAILED(hr)) { CleanupJumpListTask(pDestList, pTasks); return; }
     //-------------------------------------------------------------------------------
 
     //ジャンプリストの設定先の ApplicationModelUserID の設定先を反映
-    hr = pDestList->SetAppID(RegistrationData->ApplicationModelUserID);
-    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
+    if (!g_JumpListEntries.empty() && g_JumpListEntries[0].ApplicationModelUserID) {
+        // ApplicationModelUserID があれば設定
+        pDestList->SetAppID(g_JumpListEntries[0].ApplicationModelUserID);
+    }
 
     //ジャンプリスト編集のセッションを開始
     UINT cMinSlots;
     IObjectArray* poaRemoved;
     hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
-    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
+    if (FAILED(hr)) { CleanupJumpListTask(pDestList, pTasks); return; }
 
     //ジャンプリスト登録データ用オブジェクトを用意
-    hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&pTasks));
-    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
+    hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTasks));
+    if (FAILED(hr)) { CleanupJumpListTask(pDestList, pTasks); return; }
 
-    //タスクリンク作成。
-    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&pLink));
-    if (FAILED(hr)) { Cleanup_Jumplist(pDestList, pTasks, pLink); return; }
-    
-    //作成したタスクに対して、パラメーターを設定
-    pLink->SetPath(RegistrationData->FilePath);                                        //実行パス
-    pLink->SetArguments(RegistrationData->cmdArguments);                               //引数
-    pLink->SetIconLocation(RegistrationData->iconPath, RegistrationData->IconIndex);   //アイコン設定
-    pLink->SetDescription(RegistrationData->Description);                              //アクセシビリティ用説明文
+    //設定情報を読み込む処理へ
+    for (const auto& entry : g_JumpListEntries) {
+        //hellLinkW オブジェクト（ショートカットリンク）を作成。
+        hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pLink));
+        if (FAILED(hr)) continue;   //ShellLinkW オブジェクト（ショートカットリンク）を生成しようと試みて、もし失敗したらそのエントリの処理をスキップして次のループへ進む
 
-    //ジャンプリストに、追加のメタデータ付与制御(ピン留め出来ないようにする等)
-    IPropertyStore* pPropStore;
-    hr = pLink->QueryInterface(IID_PPV_ARGS(&pPropStore));
-    if (SUCCEEDED(hr)) {
-        //-----------------------PROPVARIANT の 設定値を生成------------------------
-        //BOOL：TRUE
-        PROPVARIANT varBoolTrue;
-        PropVariantInit(&varBoolTrue);
-        varBoolTrue.vt = VT_BOOL;
-        varBoolTrue.boolVal = VARIANT_TRUE;
+        //作成したタスクに対して、パラメーターを設定
+        pLink->SetPath(entry.FilePath);                                                 //実行パス
+        if (entry.cmdArguments) pLink->SetArguments(entry.cmdArguments);                //引数
+        if (entry.iconPath) pLink->SetIconLocation(entry.iconPath, entry.IconIndex);    //アイコン設定
+        if (entry.Description) pLink->SetDescription(entry.Description);                //アクセシビリティ用説明文
 
-        //BOOL：FALSE
-        PROPVARIANT varBoolFalse;
-        PropVariantInit(&varBoolFalse);
-        varBoolFalse.vt = VT_BOOL;
-        varBoolFalse.boolVal = VARIANT_FALSE;
+        //ジャンプリストに、追加のメタデータ付与制御(ピン留め出来ないようにする等)
+        IPropertyStore* pPropStore;
+        hr = pLink->QueryInterface(IID_PPV_ARGS(&pPropStore));
+        if (SUCCEEDED(hr)) {
+            //-----------------------PROPVARIANT の 設定値を生成------------------------
+            //BOOL：TRUE
+            PROPVARIANT varBoolTrue;
+            PropVariantInit(&varBoolTrue);
+            varBoolTrue.vt = VT_BOOL;
+            varBoolTrue.boolVal = VARIANT_TRUE;
 
-        //String：タスク名に該当
-        PROPVARIANT varTitle;
-        InitPropVariantFromString(RegistrationData->taskName, &varTitle);
-        //--------------------------------------------------------------------------
+            //BOOL：FALSE
+            PROPVARIANT varBoolFalse;
+            PropVariantInit(&varBoolFalse);
+            varBoolFalse.vt = VT_BOOL;
+            varBoolFalse.boolVal = VARIANT_FALSE;
 
-        //------------------------メタデータを設定/適用-----------------------------
-        //URL　https://learn.microsoft.com/ja-jp/windows/win32/properties/software-bumper
-        //pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);    //ピン留め、一覧から削除　を効かなくします
-        pPropStore->SetValue(PKEY_Title, varTitle);                             //タスク名を設定します
-    
-        //適用
-        pPropStore->Commit();
-        //--------------------------------------------------------------------------
+            //String：タスク名に該当
+            PROPVARIANT varTitle;
+            InitPropVariantFromString(entry.taskName, &varTitle);
+            //--------------------------------------------------------------------------
 
-        //変数、オブジェクトを解放
-        PropVariantClear(&varTitle);
-        PropVariantClear(&varBoolTrue);
-        pPropStore->Release();
+            //------------------------メタデータを設定/適用-----------------------------
+            //URL　https://learn.microsoft.com/ja-jp/windows/win32/properties/software-bumper
+            //pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);    //ピン留め、一覧から削除　を効かなくします
+            pPropStore->SetValue(PKEY_Title, varTitle);                             //タスク名を設定します
+
+            //適用
+            pPropStore->Commit();
+            //--------------------------------------------------------------------------
+
+            //変数、オブジェクトを解放
+            PropVariantClear(&varTitle);
+            PropVariantClear(&varBoolTrue);
+            pPropStore->Release();
+        }
+        //指定した「ApplicationModelUserID」(pTasks)に、設定したタスク(pLink->XXX)を入れる。
+        pTasks->AddObject(pLink);
+
+        //用が済んだので解放
+        pLink->Release();
     }
 
-    //指定した「ApplicationModelUserID」(pTasks)に、設定したタスク(pLink->XXX)を入れる。
-    pTasks->AddObject(pLink);
-
-    //指定したカテゴリ名称群に、上記で定義した pTasks を入れる 
-    if (RegistrationData->categoryName == nullptr || wcslen(RegistrationData->categoryName) == 0) {
-        // カテゴリ名が未指定 → Tasks に追加（ピン留めできない）
-        pDestList->AddUserTasks(pTasks);
+    // エントリがない場合 → ジャンプリストをクリア
+    if (g_JumpListEntries.empty()) {
+        UINT cMinSlots;
+        IObjectArray* poaRemoved;
+        hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
     }
     else {
-        // カテゴリ名が指定されている → 任意カテゴリ名で追加（ピン留め可能性あり）
-        pDestList->AppendCategory(RegistrationData->categoryName, pTasks);
+        if (g_JumpListEntries[0].categoryName == nullptr || wcslen(g_JumpListEntries[0].categoryName) == 0) {
+            // カテゴリ名が未指定 → Tasks に追加（ピン留めできない）
+            pDestList->AddUserTasks(pTasks);
+        }
+        else {
+            // カテゴリ名が指定されている → 任意カテゴリ名で追加（ピン留め可能性あり）
+            pDestList->AppendCategory(g_JumpListEntries[0].categoryName, pTasks);
+        }
+
+        //ジャンプリスト登録
+        pDestList->CommitList();
     }
 
-    //ジャンプリスト登録
-    pDestList->CommitList();
+    //クリーンアップ処理
+    CleanupJumpListTask(pDestList, pTasks);
 }

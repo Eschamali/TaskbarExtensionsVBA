@@ -14,6 +14,7 @@
 #pragma comment(lib, "comctl32.lib")            //サブクラス関連
 #pragma comment(lib, "gdiplus.lib")             //内部でアイコン描画
 
+
 //外部参照設定つまりはVBAからでもアクセスできるようにする設定。おまじないと思ってください。
 //詳細→https://liclog.net/vba-dll-create-1/
 #ifdef TaskbarProgressVBA_EXPORTS
@@ -60,4 +61,5 @@ extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadge(int badg
 extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd);
 extern "C" TaskbarProgressVBA_API void __stdcall InitializeThumbnailButton(HWND hwnd);
 extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);
-extern "C" TaskbarProgressVBA_API void __stdcall Registration_Jumplist(const JumpListData* RegistrationData);
+extern "C" TaskbarProgressVBA_API void __stdcall AddJumpListTask(const JumpListData* data);
+extern "C" TaskbarProgressVBA_API void __stdcall CommitJumpList();
