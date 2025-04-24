@@ -585,9 +585,8 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
 
     // エントリがない場合 → ジャンプリストをクリア
     if (g_JumpListEntries.empty()) {
-        UINT cMinSlots;
-        IObjectArray* poaRemoved;
-        hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
+        // 何も追加せず、空データによる CommitList で「クリア」
+        pDestList->CommitList();
     }
     else {
 
