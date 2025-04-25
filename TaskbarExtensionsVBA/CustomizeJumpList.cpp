@@ -125,12 +125,20 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
         //hellLinkW オブジェクト（ショートカットリンク）を作成。
         hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pLink));
         if (FAILED(hr)) continue;   //ShellLinkW オブジェクト（ショートカットリンク）を生成しようと試みて、もし失敗したらそのエントリの処理をスキップして次のループへ進む
-
-        //作成したタスクに対して、パラメーターを設定
-        pLink->SetPath(entry.FilePath.c_str());                                                     //実行パス
-        if (entry.cmdArguments.c_str()) pLink->SetArguments(entry.cmdArguments.c_str());            //引数
-        if (entry.iconPath.c_str()) pLink->SetIconLocation(entry.iconPath.c_str(), entry.IconIndex);//アイコン設定
-        if (entry.Description.c_str()) pLink->SetDescription(entry.Description.c_str());            //ツールチップ
+        
+        // ---- Separator or Normal Task 判定(ジャンプ リストの タスク セクションに区切り記号を挿入する際の判定用) ----
+        bool isSeparator = entry.FilePath.empty();
+        if (!isSeparator) {
+            //作成したタスクに対して、パラメーターを設定(通常タスク)
+            pLink->SetPath(entry.FilePath.c_str());                                                     //実行パス
+            if (entry.cmdArguments.c_str()) pLink->SetArguments(entry.cmdArguments.c_str());            //引数
+            if (entry.iconPath.c_str()) pLink->SetIconLocation(entry.iconPath.c_str(), entry.IconIndex);//アイコン設定
+            if (entry.Description.c_str()) pLink->SetDescription(entry.Description.c_str());            //ツールチップ
+        }
+        else {
+            // Separator の場合は SetPath(nullptr)として、セパレーターとして認識できるようにする
+            pLink->SetPath(nullptr);
+        }
 
         //ジャンプリストに、追加のメタデータ付与制御(ピン留め出来ないようにする等)
         IPropertyStore* pPropStore;
@@ -149,6 +157,12 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
             varBoolFalse.vt = VT_BOOL;
             varBoolFalse.boolVal = VARIANT_FALSE;
 
+            //「FilePath.empty()」に応じた真偽値
+            PROPVARIANT varBoolSeparator;
+            PropVariantInit(&varBoolSeparator);
+            varBoolSeparator.vt = VT_BOOL;
+            varBoolSeparator.boolVal = isSeparator ? VARIANT_TRUE : VARIANT_FALSE;
+
             //String：タスク名に該当
             PROPVARIANT varTitle;
             InitPropVariantFromString(entry.taskName.c_str(), &varTitle);
@@ -156,9 +170,9 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
 
             //------------------------メタデータを設定/適用-----------------------------
             //URL　https://learn.microsoft.com/ja-jp/windows/win32/properties/software-bumper
-            pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);        //ジャンプリストの 「タスク」セクションに区切り記号を挿入します。「タスク」セクション以外のカスタムセクションは効果ありません。
-            pPropStore->SetValue(PKEY_AppUserModel_IsDestListSeparator, varBoolTrue);   //ピン留め、一覧から削除　を効かなくします
-            pPropStore->SetValue(PKEY_Title, varTitle);                                 //タスク名を設定します
+            //pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);            //ピン留め、一覧から削除　を効かなくします
+            pPropStore->SetValue(PKEY_AppUserModel_IsDestListSeparator, varBoolSeparator);  //ジャンプリストの 「タスク」セクションに区切り記号を挿入します。
+            pPropStore->SetValue(PKEY_Title, varTitle);                                     //タスク名を設定します
 
             //適用
             pPropStore->Commit();
