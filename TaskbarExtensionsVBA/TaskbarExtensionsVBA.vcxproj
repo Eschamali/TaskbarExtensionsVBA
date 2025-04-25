@@ -150,7 +150,7 @@
   <ItemGroup>
     <ClCompile Include="CustomizeJumpList.cpp" />
     <ClCompile Include="OverlayIcon.cpp" />
-    <ClCompile Include="TaskbarProgress.cpp" />
+    <ClCompile Include="Progress.cpp" />
     <ClCompile Include="ThumbBarButtons.cpp" />
   </ItemGroup>
   <ItemGroup>

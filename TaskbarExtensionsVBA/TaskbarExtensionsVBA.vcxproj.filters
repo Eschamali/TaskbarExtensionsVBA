@@ -20,7 +20,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="TaskbarProgress.cpp">
+    <ClCompile Include="Progress.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
     <ClCompile Include="ThumbBarButtons.cpp">
