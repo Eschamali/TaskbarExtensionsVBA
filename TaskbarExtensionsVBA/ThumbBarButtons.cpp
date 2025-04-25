@@ -10,7 +10,7 @@
 // ・ITaskbarList3::ThumbBarUpdateButtons
 // 
 // URL
-// ・https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions#thumbnail-toolbars
+// https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions#thumbnail-toolbars
 //***************************************************************************************************
 
 
