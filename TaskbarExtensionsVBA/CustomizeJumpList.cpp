@@ -182,7 +182,7 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
             //------------------------メタデータを設定/適用-----------------------------
             //URL　https://learn.microsoft.com/ja-jp/windows/win32/properties/software-bumper
             //pPropStore->SetValue(PKEY_AppUserModel_PreventPinning, varBoolTrue);            //ピン留め、一覧から削除　を効かなくします
-            pPropStore->SetValue(PKEY_AppUserModel_IsDestListSeparator, varBoolSeparator);  //ジャンプリストの 「タスク」セクションに区切り記号を挿入します。
+            pPropStore->SetValue(PKEY_AppUserModel_IsDestListSeparator, varBoolSeparator);  //ジャンプリストの 「タスク」セクションに区切り線を挿入します。
             pPropStore->SetValue(PKEY_Title, varTitle);                                     //タスク名を設定します
 
             //適用
