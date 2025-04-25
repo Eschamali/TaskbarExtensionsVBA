@@ -148,6 +148,7 @@
     <ClInclude Include="common.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CustomizeJumpList.cpp" />
     <ClCompile Include="TaskbarProgress.cpp" />
     <ClCompile Include="ThumbBarButtons.cpp" />
   </ItemGroup>
