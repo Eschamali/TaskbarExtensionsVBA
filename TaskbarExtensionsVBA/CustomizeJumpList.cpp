@@ -22,7 +22,7 @@
 //***************************************************************************************************
 //                           ■■■ 静的ユーザー定義型/定数 ■■■
 //***************************************************************************************************
-static struct JumpListDataSafe
+struct JumpListDataSafe
 {
     std::wstring categoryName;
     std::wstring taskName;
@@ -30,7 +30,7 @@ static struct JumpListDataSafe
     std::wstring cmdArguments;
     std::wstring iconPath;
     std::wstring Description;
-    LONG IconIndex;
+    LONG IconIndex = 0;
 };
 
 static std::vector<JumpListDataSafe> g_JumpListEntries;	//ジャンプリストデータ保持
