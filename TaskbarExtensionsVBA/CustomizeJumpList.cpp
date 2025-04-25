@@ -20,9 +20,20 @@
 
 
 //***************************************************************************************************
-//                              ■■■ グローバル変数/定数 ■■■
+//                           ■■■ 静的ユーザー定義型/定数 ■■■
 //***************************************************************************************************
-std::vector<JumpListDataSafe> g_JumpListEntries;	//ジャンプリストデータ保持
+static struct JumpListDataSafe
+{
+    std::wstring categoryName;
+    std::wstring taskName;
+    std::wstring FilePath;
+    std::wstring cmdArguments;
+    std::wstring iconPath;
+    std::wstring Description;
+    LONG IconIndex;
+};
+
+static std::vector<JumpListDataSafe> g_JumpListEntries;	//ジャンプリストデータ保持
 
 
 
@@ -35,7 +46,7 @@ std::vector<JumpListDataSafe> g_JumpListEntries;	//ジャンプリストデー�
 //---------------------------------------------------------------------------------------------------
 //* 詳細説明 ： ポインタによるクリア方式を取っています
 //***************************************************************************************************
-void CleanupJumpListTask(ICustomDestinationList* pDestList, IObjectCollection* pTasks) {
+static void CleanupJumpListTask(ICustomDestinationList* pDestList, IObjectCollection* pTasks) {
     if (pTasks) pTasks->Release();
     if (pDestList) pDestList->Release();
 

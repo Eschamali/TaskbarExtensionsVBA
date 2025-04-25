@@ -67,7 +67,7 @@ static std::wstring GetBadgeValueString(int badgeValue)
 //---------------------------------------------------------------------------------------------------
 //* 詳細説明 ：
 //***************************************************************************************************
-HICON CreateBadgeIcon(int number)
+static HICON CreateBadgeIcon(int number)
 {
     // GDI+ 初期化
     static bool initialized = false;

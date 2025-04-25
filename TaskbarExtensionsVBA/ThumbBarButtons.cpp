@@ -21,10 +21,10 @@
 
 
 //***************************************************************************************************
-//                              ■■■ グローバル変数/定数 ■■■
+//                                  ■■■ 静的変数/定数 ■■■
 //***************************************************************************************************
-#define MAX_BUTTONS 7                                                   //配置可能なボタンの上限数
-#define ButtonID_Correction 1001                                        //ボタンIDの採番開始番号
+static constexpr int MAX_BUTTONS = 7;                                   //配置可能なボタンの上限数
+static constexpr int ButtonID_Correction = 1001;                        //ボタンIDの採番開始番号
 
 static ITaskbarList3* g_taskbar = nullptr;                              //ITaskbarList3オブジェクト
 static THUMBBUTTON g_btns[MAX_BUTTONS] = {};                            //ボタン情報格納用
@@ -39,7 +39,7 @@ static VbaCallback g_thumbButtonCallbacks[MAX_BUTTONS] = { nullptr };   //各ボ
 //***************************************************************************************************
 //* 機能　　 ：ITaskbarList3 インターフェースを初期化して使えるようにするためのものです
 //***************************************************************************************************
-void EnsureTaskbarInterface()
+static void EnsureTaskbarInterface()
 {
     if (!g_taskbar) {
         CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -58,7 +58,7 @@ void EnsureTaskbarInterface()
 //---------------------------------------------------------------------------------------------------
 //* 詳細説明 ：Excelで言う、全イベント処理がここに集約されてるイメージです。イベントごとの処理は、Switch文がやりやすいです。
 //***************************************************************************************************
-LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+static LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
 {
     //switch文で、イベントごとに「やりたい処理」を書く
     switch (msg)

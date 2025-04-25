@@ -52,18 +52,6 @@ struct JumpListData
 };
 #pragma pack()
 
-//DLL内 専用構造体
-struct JumpListDataSafe
-{
-    std::wstring categoryName;
-    std::wstring taskName;
-    std::wstring FilePath;
-    std::wstring cmdArguments;
-    std::wstring iconPath;
-    std::wstring Description;
-    LONG IconIndex;
-};
-
 
 //VBAで扱いたい関数を宣言
 extern "C" TaskbarExtensions_API void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status);
