@@ -25,7 +25,7 @@
     <ProjectGuid>{b9541de2-429a-4085-864f-625874210aed}</ProjectGuid>
     <RootNamespace>VBADLL</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>TaskbarProgress</ProjectName>
+    <ProjectName>TaskbarExtensions</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -148,6 +148,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="TaskbarProgress.cpp" />
+    <ClCompile Include="ThumbBarButtons.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

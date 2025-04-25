@@ -17,10 +17,10 @@
 
 //外部参照設定つまりはVBAからでもアクセスできるようにする設定。おまじないと思ってください。
 //詳細→https://liclog.net/vba-dll-create-1/
-#ifdef TaskbarProgressVBA_EXPORTS
-#define TaskbarProgressVBA_API __declspec(dllexport)
+#ifdef TaskbarExtensions_EXPORTS
+#define TaskbarExtensions_API __declspec(dllexport)
 #else
-#define TaskbarProgressVBA_API __declspec(dllimport)
+#define TaskbarExtensions_API __declspec(dllimport)
 #endif
 
 
@@ -66,11 +66,11 @@ struct JumpListDataSafe
 
 
 //VBAで扱いたい関数を宣言
-extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status);
-extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description);
-extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID);
-extern "C" TaskbarProgressVBA_API void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd);
-extern "C" TaskbarProgressVBA_API void __stdcall InitializeThumbnailButton(HWND hwnd);
-extern "C" TaskbarProgressVBA_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);
-extern "C" TaskbarProgressVBA_API void __stdcall AddJumpListTask(const JumpListData* data);
-extern "C" TaskbarProgressVBA_API void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID);
+extern "C" TaskbarExtensions_API void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status);
+extern "C" TaskbarExtensions_API void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description);
+extern "C" TaskbarExtensions_API void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID);
+extern "C" TaskbarExtensions_API void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd);
+extern "C" TaskbarExtensions_API void __stdcall InitializeThumbnailButton(HWND hwnd);
+extern "C" TaskbarExtensions_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);
+extern "C" TaskbarExtensions_API void __stdcall AddJumpListTask(const JumpListData* data);
+extern "C" TaskbarExtensions_API void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID);
