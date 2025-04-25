@@ -6,7 +6,7 @@
  * ・通常操作では登録できないショートカットファイルも、ジャンプリストへ追加可能
  * ・VBAからの操作に対応
  *
- * 利用API: ITaskbarList3::ThumbBarAddButtons など
+ * 利用API: ICustomDestinationList
  * 
  * URL
  * https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions#customizing-jump-lists
