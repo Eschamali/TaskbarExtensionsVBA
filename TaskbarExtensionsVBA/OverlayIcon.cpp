@@ -129,12 +129,17 @@ static HICON CreateBadgeIcon(int number)
 //* 機能説明 ：オーバーレイアイコンの削除は、iconIndex を -1 以下にします。
 //***************************************************************************************************
 void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int iconIndex, const wchar_t* description)
-{
+{     
+    //数値→文字列変換用変数
+    wchar_t buffer[256];
+
     // ITaskbarList3インターフェースを取得
     ITaskbarList3* pTaskbarList = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
     if (FAILED(hr)) {
-        MessageBoxW(nullptr, L"Failed to create ITaskbarList3 instance.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+        // 初期化失敗したので、イベントビュアーへ記録
+        swprintf(buffer, 256, L"Failed to create ITaskbarList3 instance.\nErrorCode：0x%08X", hr);
+        WriteToEventViewer(2, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
         return;
     }
 
@@ -142,7 +147,9 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
     if (iconIndex < 0) {
         hr = pTaskbarList->SetOverlayIcon(hwnd, NULL, NULL);
         if (FAILED(hr)) {
-            MessageBoxW(nullptr, L"FFailed to remove overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+            // アイコン削除に失敗したので、イベントビュアーへ記録
+            swprintf(buffer, 256, L"Failed to remove overlay icon.\nErrorCode：0x%08X", hr);
+            WriteToEventViewer(3, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
         }
         pTaskbarList->Release();
         return;
@@ -156,7 +163,8 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         // .icoファイルからアイコンをロード
         hIcon = (HICON)LoadImage(NULL, filePath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE | LR_SHARED);
         if (hIcon == NULL) {
-            MessageBoxW(nullptr, L"Failed to load .ico file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+            // アイコン読み込み失敗したので、イベントビュアーへ記録
+            WriteToEventViewer(4, SourceName, L"Failed to load .ico file.",  EVENTLOG_ERROR_TYPE, 0, TRUE);
             pTaskbarList->Release();
             return;
         }
@@ -165,7 +173,8 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         // .exeファイルからアイコンをインデックス指定でロード
         hIcon = ExtractIcon(NULL, filePath, iconIndex);
         if (hIcon == NULL || hIcon == (HICON)1) {
-            MessageBoxW(nullptr, L"Failed to extract icon from .exe file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+            // .exeファイルからアイコン抽出失敗時、イベントビュアーへ記録
+            WriteToEventViewer(5, SourceName, L"Failed to extract icon from .exe file.",  EVENTLOG_ERROR_TYPE, 0, TRUE);
             pTaskbarList->Release();
             return;
         }
@@ -174,14 +183,16 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         // .dllファイルからアイコンをインデックス指定でロード
         HMODULE hModule = LoadLibraryEx(filePath, NULL, LOAD_LIBRARY_AS_DATAFILE);
         if (hModule == NULL) {
-            MessageBoxW(nullptr, L"Failed to load .dll file.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+            // .dllファイルからアイコン抽出失敗時、イベントビュアーへ記録
+            WriteToEventViewer(6, SourceName, L"Failed to load .dll file.", EVENTLOG_ERROR_TYPE, 0, TRUE);
             pTaskbarList->Release();
             return;
         }
 
         hIcon = (HICON)LoadImage(hModule, MAKEINTRESOURCE(iconIndex), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
         if (hIcon == NULL) {
-            MessageBoxW(nullptr, L"Failed to load icon from resource.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+            //アイコンリソースの抽出失敗時、イベントビュアーへ記録
+            WriteToEventViewer(7, SourceName, L"Failed to load icon from resource.", EVENTLOG_ERROR_TYPE, 0, TRUE);
             FreeLibrary(hModule);
             pTaskbarList->Release();
             return;
@@ -190,7 +201,8 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
         FreeLibrary(hModule);
     }
     else {
-        MessageBoxW(nullptr, L"Unsupported file type.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+        //iconデータでないファイルを渡された時
+        WriteToEventViewer(8, SourceName, L"Unsupported file type.", EVENTLOG_ERROR_TYPE, 0, TRUE);
         pTaskbarList->Release();
         return;
     }
@@ -198,7 +210,8 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
     // タスクバーにオーバーレイアイコンを設定
     hr = pTaskbarList->SetOverlayIcon(hwnd, hIcon, description);
     if (FAILED(hr)) {
-        MessageBoxW(nullptr, L"Failed to set overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+        //オーバレイ反映に失敗した時
+        WriteToEventViewer(9, SourceName, L"Failed to set overlay icon.", EVENTLOG_ERROR_TYPE, 0, TRUE);
     }
 
     // アイコンを解放
@@ -220,11 +233,16 @@ void __stdcall SetTaskbarOverlayIcon(HWND hwnd, const wchar_t* filePath, int ico
 //***************************************************************************************************
 void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd)
 {
+    //数値→文字列変換用変数
+    wchar_t buffer[256];
+
     // ITaskbarList3インターフェースを取得
     ITaskbarList3* pTaskbarList = nullptr;
     HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
     if (FAILED(hr)) {
-        MessageBoxW(nullptr, L"Failed to create ITaskbarList3 instance.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+        // 初期化失敗したので、イベントビュアーへ記録
+        swprintf(buffer, 256, L"Failed to create ITaskbarList3 instance.\nErrorCode：0x%08X", hr);
+        WriteToEventViewer(2, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
         return;
     }
 
@@ -232,7 +250,9 @@ void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd)
     if (badgeValue <= 0) {
         hr = pTaskbarList->SetOverlayIcon(hwnd, NULL, NULL);
         if (FAILED(hr)) {
-            MessageBoxW(nullptr, L"Failed to remove overlay icon.", L"ITaskbarList3 Error", MB_OK | MB_ICONERROR);
+            // アイコン削除に失敗したので、イベントビュアーへ記録
+            swprintf(buffer, 256, L"Failed to remove overlay icon.\nErrorCode：0x%08X", hr);
+            WriteToEventViewer(3, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
         }
         pTaskbarList->Release();
         return;
@@ -257,15 +277,17 @@ void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd)
 //***************************************************************************************************
 void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID)
 {
+    //数値→文字列変換用変数
+    wchar_t buffer[256];
+
     // COMの初期化
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (hr == RPC_E_CHANGED_MODE) {
         // 既に異なるアパートメント モードで初期化されている場合は、そのまま続行
     }
     else if (FAILED(hr)) {
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, 256, L"COM初期化に失敗しました。HRESULT: 0x%08X", hr);
-        MessageBoxW(nullptr, errorMsg, L"エラー", MB_OK | MB_ICONERROR);
+        swprintf(buffer, 256, L"COM初期化に失敗しました。HRESULT: 0x%08X", hr);
+        WriteToEventViewer(10, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
         return;
     }
 
@@ -287,6 +309,6 @@ void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserMode
     }
     catch (...) {
         // エラー処理
-        MessageBoxW(nullptr, L"バッジ通知の表示に失敗しました。", L"Badge Error", MB_OK | MB_ICONERROR);
+        WriteToEventViewer(11, SourceName, L"バッジ通知の表示に失敗しました。", EVENTLOG_ERROR_TYPE, 0, TRUE);
     }
 }

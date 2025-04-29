@@ -98,13 +98,23 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
     ICustomDestinationList* pDestList = nullptr;
     IObjectCollection* pTasks = nullptr;
     IShellLinkW* pLink = nullptr;
+    wchar_t buffer[256];
 
     //-------------ジャンプリスト関連COMオブジェクトの準備に関わるお作法-------------
     hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(hr)) return;
+    if (FAILED(hr)) {
+        swprintf(buffer, 256, L"CoInitializeEx failed.\nErrorCode：0x%08X", hr);
+        WriteToEventViewer(1, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+        return;
+    }
 
     hr = CoCreateInstance(CLSID_DestinationList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDestList));
-    if (FAILED(hr)) { CleanupJumpListTask(pDestList, pTasks); return; }
+    if (FAILED(hr)) { 
+        CleanupJumpListTask(pDestList, pTasks); 
+        swprintf(buffer, 256, L"CoInitializeEx failed.\nErrorCode：0x%08X", hr);
+        WriteToEventViewer(2, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+        return;
+    }
     //-------------------------------------------------------------------------------
 
     //ジャンプリストの設定先の ApplicationModelUserID の設定先を反映
@@ -114,11 +124,23 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
     UINT cMinSlots;
     IObjectArray* poaRemoved;
     hr = pDestList->BeginList(&cMinSlots, IID_PPV_ARGS(&poaRemoved));
-    if (FAILED(hr)) { CleanupJumpListTask(pDestList, pTasks); return; }
+    if (FAILED(hr)) {
+        swprintf(buffer, 256, L"ジャンプリスト編集準備に失敗。\nErrorCode：0x%08X", hr);
+        WriteToEventViewer(12, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+
+        CleanupJumpListTask(pDestList, pTasks); 
+        return; 
+    }
 
     //ジャンプリスト登録データ用オブジェクトを用意
     hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTasks));
-    if (FAILED(hr)) { CleanupJumpListTask(pDestList, pTasks); return; }
+    if (FAILED(hr)) {
+        swprintf(buffer, 256, L"ジャンプリスト登録データ準備失敗\nErrorCode：0x%08X", hr);
+        WriteToEventViewer(13, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+        
+        CleanupJumpListTask(pDestList, pTasks);
+        return; 
+    }
 
     //カテゴリ名、収集準備
     std::map<std::wstring, CComPtr<IObjectCollection>> categoryTasks;
@@ -129,13 +151,23 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
         if (categoryTasks.find(entry.categoryName) == categoryTasks.end()) {
             CComPtr<IObjectCollection> pNewCollection;
             hr = CoCreateInstance(CLSID_EnumerableObjectCollection, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pNewCollection));
-            if (FAILED(hr)) continue;
+            if (FAILED(hr)) { 
+                swprintf(buffer, 256, L"カテゴリ名の登録に失敗。\nErrorCode：0x%08X", hr);
+                WriteToEventViewer(14, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+
+                continue; 
+            }
             categoryTasks[entry.categoryName] = pNewCollection;
         }
 
         //hellLinkW オブジェクト（ショートカットリンク）を作成。
         hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pLink));
-        if (FAILED(hr)) continue;   //ShellLinkW オブジェクト（ショートカットリンク）を生成しようと試みて、もし失敗したらそのエントリの処理をスキップして次のループへ進む
+        if (FAILED(hr)) { 
+            swprintf(buffer, 256, L"/ShellLinkW オブジェクト（ショートカットリンク）の生成失敗。\nErrorCode：0x%08X", hr);
+            WriteToEventViewer(13, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+            
+            continue; 
+        }
         
         // ---- Separator or Normal Task 判定(ジャンプ リストの タスク セクションに区切り記号を挿入する際の判定用) ----
         bool isSeparator = entry.FilePath.empty();
@@ -211,7 +243,12 @@ void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID)
         for (const auto& [category, tasks] : categoryTasks) {
             CComPtr<IObjectArray> pObjectArray;
             hr = tasks->QueryInterface(IID_PPV_ARGS(&pObjectArray));
-            if (FAILED(hr)) continue;
+            if (FAILED(hr)) { 
+                swprintf(buffer, 256, L"ジャンプリスト、追加失敗。\nErrorCode：0x%08X", hr);
+                WriteToEventViewer(14, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+
+                continue; 
+            }
 
             //カテゴリ名が空のものは AddUserTasks に
             if (category.empty()) {

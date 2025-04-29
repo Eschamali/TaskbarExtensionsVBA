@@ -35,6 +35,13 @@ void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned lon
 	ITaskbarList3* pTaskbarList = nullptr;
 	HRESULT hr = CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pTaskbarList));
 	if (FAILED(hr)) {
+		//数値→文字列変換用変数
+		wchar_t buffer[256];
+
+		// 処理失敗したので、イベントビュアーへ記録
+		swprintf(buffer, 256, L"SetTaskbarProgress 関数にて、CoCreateInstance failed.\nErrorCode：0x%08X", hr);
+		WriteToEventViewer(2, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+
 		return;
 	}
 

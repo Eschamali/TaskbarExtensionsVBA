@@ -41,10 +41,27 @@ static VbaCallback g_thumbButtonCallbacks[MAX_BUTTONS] = { nullptr };   //各ボ
 //***************************************************************************************************
 static void EnsureTaskbarInterface()
 {
+    //数値→文字列変換用変数
+    wchar_t buffer[256];
+
     if (!g_taskbar) {
-        CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-        CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_taskbar));
-        if (g_taskbar) g_taskbar->HrInit();
+        HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+        if (FAILED(hr)) {
+            // 初期化失敗したので、イベントビュアーへ記録
+            swprintf(buffer, 256, L"CoInitializeEx failed.\nErrorCode：0x%08X", hr);
+            WriteToEventViewer(1, SourceName, buffer, EVENTLOG_ERROR_TYPE,0,TRUE);
+            return;
+        }
+
+        hr = CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_taskbar));
+        if (SUCCEEDED(hr) && g_taskbar) {
+            g_taskbar->HrInit();
+        }
+        else {
+            // 処理失敗したので、イベントビュアーへ記録
+            swprintf(buffer, 256, L"CoCreateInstance failed.\nErrorCode：0x%08X", hr);
+            WriteToEventViewer(2, SourceName, buffer, EVENTLOG_ERROR_TYPE, 0, TRUE);
+        }
     }
 }
 
