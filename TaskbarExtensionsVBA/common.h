@@ -27,6 +27,9 @@
 //関数ポインタの型を定義し、VBA内のプロシージャ名を呼び出せるようにする
 typedef void(__stdcall* VbaCallback)();
 
+//イベントビュアーのSource名用
+static constexpr const wchar_t* SourceName = L"TaskbarExtensions.dll";
+
 
 // VBA→DLLやり取り用ユーザー定義型を定義します。
 // ※VBA側で、シグネチャ（型や順序）が合うようにすること。例外として、BOOLはlongで渡さないと上手くいきません
@@ -52,6 +55,8 @@ struct JumpListData
 };
 #pragma pack()
 
+//このプロジェクト用パブリック関数を宣言
+void WriteToEventViewer(DWORD eventID,const wchar_t* sourceName,const wchar_t* description,WORD eventLevel,WORD category,BOOL alwaysLog);
 
 //VBAで扱いたい関数を宣言
 extern "C" TaskbarExtensions_API void __stdcall SetTaskbarProgress(HWND hwnd, unsigned long current, unsigned long maximum, long status);

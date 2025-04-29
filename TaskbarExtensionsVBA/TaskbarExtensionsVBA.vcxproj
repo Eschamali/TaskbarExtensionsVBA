@@ -152,6 +152,7 @@
     <ClCompile Include="OverlayIcon.cpp" />
     <ClCompile Include="Progress.cpp" />
     <ClCompile Include="ThumbBarButtons.cpp" />
+    <ClCompile Include="WriteEventViewer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
