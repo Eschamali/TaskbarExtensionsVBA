@@ -79,8 +79,9 @@ static HICON CreateBadgeIcon(int number)
     }
 
     // 描画サイズ（アイコンサイズ）
-    const int size = 32;
-    Bitmap bmp(size, size, PixelFormat32bppARGB);
+    int width = (number <= 9) ? 32 : 44;
+    int height = 32;
+    Bitmap bmp(width, height, PixelFormat32bppARGB);
     Graphics g(&bmp);
 
     g.SetSmoothingMode(SmoothingModeAntiAlias);
@@ -88,7 +89,7 @@ static HICON CreateBadgeIcon(int number)
 
     // 赤い円
     SolidBrush redBrush(Color(255, 255, 0, 0)); // 赤
-    g.FillEllipse(&redBrush, 0, 0, size, size);
+    g.FillEllipse(&redBrush, 0, 0, width, height);  // 円 or 楕円
 
     // 白文字
     WCHAR buf[4];
@@ -98,13 +99,16 @@ static HICON CreateBadgeIcon(int number)
         lstrcpyW(buf, L"99+");
 
     FontFamily fontFamily(L"Segoe UI");
-    Gdiplus::Font font(&fontFamily, 14, FontStyleBold, UnitPixel);
+    Gdiplus::Font font(&fontFamily, (number <= 9) ? 24 : 20, FontStyleBold, UnitPixel);
     SolidBrush whiteBrush(Color(255, 255, 255)); // 白
 
-    RectF layoutRect(0, 0, size, size);
+    // 描画範囲
+    RectF layoutRect(0, 0, width, height);  // 余白ゼロ
+
     StringFormat format;
     format.SetAlignment(StringAlignmentCenter);
     format.SetLineAlignment(StringAlignmentCenter);
+    format.SetFormatFlags(StringFormatFlagsNoWrap); // 折り返し禁止
 
     g.DrawString(buf, -1, &font, layoutRect, &format, &whiteBrush);
 
