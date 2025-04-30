@@ -167,8 +167,13 @@ void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback ca
 
     // アイコン
     HICON hIcon = NULL;
-    if (data->IconPath) {
+
+    //インデックス値が負になってたら、アイコンなしのままにします
+    if (data->IconPath && data->IconIndex >= 0) {
         ExtractIconExW(data->IconPath, data->IconIndex, NULL, &hIcon, 1);
+    }
+    else {
+        DestroyIcon(btn.hIcon);
     }
     btn.hIcon = hIcon;
 
