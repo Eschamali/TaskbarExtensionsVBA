@@ -78,41 +78,52 @@ static HICON CreateBadgeIcon(int number)
         initialized = true;
     }
 
-    // 描画サイズ（アイコンサイズ）
-    int width = (number <= 9) ? 32 : 44;
-    int height = 32;
-    Bitmap bmp(width, height, PixelFormat32bppARGB);
+    const int canvasSize = 32;  // 正方形キャンバス（アイコン全体）
+    const int ellipseWidth = 32;
+    const int ellipseHeight = (number <= 9) ? 32 : 28;
+    int FontSize;
+
+    Bitmap bmp(canvasSize, canvasSize, PixelFormat32bppARGB);
     Graphics g(&bmp);
-
     g.SetSmoothingMode(SmoothingModeAntiAlias);
-    g.Clear(Color(0, 0, 0, 0)); // 透明背景
+    g.Clear(Color(0, 0, 0, 0));  // 完全透明背景
 
-    // 赤い円
-    SolidBrush redBrush(Color(255, 255, 0, 0)); // 赤
-    g.FillEllipse(&redBrush, 0, 0, width, height);  // 円 or 楕円
+    // --- 楕円の中心座標計算（キャンバス中央に配置） ---
+    int x = (canvasSize - ellipseWidth) / 2;
+    int y = (canvasSize - ellipseHeight) / 2;
 
-    // 白文字
+    // --- 赤い楕円描画 ---
+    SolidBrush redBrush(Color(255, 255, 0, 0));  // 赤色
+    g.FillEllipse(&redBrush, x, y, ellipseWidth, ellipseHeight);
+
+    // --- 白文字の準備 ---
     WCHAR buf[4];
     if (number <= 99)
         wsprintf(buf, L"%d", number);
     else
         lstrcpyW(buf, L"99+");
 
+    //フォントサイズ決め
+    if (number <= 9)
+        FontSize = 24;
+    else if (number <= 99)
+        FontSize = 20;
+    else
+        FontSize = 14;
+
     FontFamily fontFamily(L"Segoe UI");
-    Gdiplus::Font font(&fontFamily, (number <= 9) ? 24 : 20, FontStyleBold, UnitPixel);
-    SolidBrush whiteBrush(Color(255, 255, 255)); // 白
+    Gdiplus::Font font(&fontFamily, FontSize, FontStyleBold, UnitPixel);
+    SolidBrush whiteBrush(Color(255, 255, 255));  // 白
 
-    // 描画範囲
-    RectF layoutRect(0, 0, width, height);  // 余白ゼロ
-
+    // --- 文字描画の範囲を楕円内に限定 ---
+    RectF layoutRect((REAL)x, (REAL)y, (REAL)ellipseWidth, (REAL)ellipseHeight);
     StringFormat format;
     format.SetAlignment(StringAlignmentCenter);
     format.SetLineAlignment(StringAlignmentCenter);
-    format.SetFormatFlags(StringFormatFlagsNoWrap); // 折り返し禁止
 
     g.DrawString(buf, -1, &font, layoutRect, &format, &whiteBrush);
 
-    // アイコンに変換
+    // アイコンに変換して返す
     HICON hIcon = nullptr;
     bmp.GetHICON(&hIcon);
     return hIcon;
