@@ -96,7 +96,10 @@ End Type
 '* 注意事項 ：アドレスで、プロシージャ情報を渡してる都合上、その処理を変えたら再度、「UpdateThumbnailButton」で更新する必要があります
 '* URL      ：https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ns-shobjidl_core-thumbbutton
 '***************************************************************************************************
-Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optional IconPath As String, Optional IconIndex As Long, Optional ButtonType As THUMBBUTTONFLAGS, Optional Description As String, ButtonIndex As Long)
+Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optional ByVal IconPath As String, Optional ByVal IconIndex As Long, Optional ByVal ButtonType As THUMBBUTTONFLAGS, Optional ByVal Description As String, ButtonIndex As Long)
+    'アイコン未指定時は、Excelのアイコンセットをパスにする
+    If IconPath = "" Then IconPath = Application.Path & "\XLICONS.EXE"
+
     '範囲外なら、エラーで、止める
     If ButtonIndex < 1 Or ButtonIndex > MAX_BUTTONS Then
         Err.Raise vbObjectError + ErrorValue_範囲外THUMBBUTTON, ErrorNAme_範囲外THUMBBUTTON, "ボタンインデックスは 1 ～ 7 にしてください。"
@@ -172,8 +175,7 @@ End Function
 '---------------------------------------------------------------------------------------------------
 '* 引数　　：WindowHwnd               ウィンドウハンドル
 '---------------------------------------------------------------------------------------------------
-'* 注意事項：・非表示として確保するためこれだけでは見た目上、何も起こりません
-'            ・MakeButtonNum を 0 で渡すと、定義自体を削除します
+'* 注意事項：非表示として確保するためこれだけでは見た目上、何も起こりません
 '***************************************************************************************************
 Public Property Let InstallationButton(WindowHwnd As LongPtr)
     '未指定ならExcelApplicationを指定
