@@ -1,7 +1,6 @@
 Attribute VB_Name = "Mod01_BadgeUpdateManager"
 '***************************************************************************************************
-'               VBAから、Windows PowerShell を経由して、バッジ通知を表示させます
-'公式ドキュメント：https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges
+'                                  バッジ通知に関するモジュールです
 '***************************************************************************************************
 Option Explicit
 
@@ -12,8 +11,9 @@ Option Explicit
 '***************************************************************************************************
 ' 機能     ：C++で書かれたDLLに、 BadgeNotification関連の処理を埋め込ませ、Shell経由より高速に処理できます
 '***************************************************************************************************
-Private Declare PtrSafe Sub SetTaskbarOverlayBadge Lib "TaskbarProgress.dll" (ByVal badgeValue As Long, ByVal appId As LongPtr)
-Private Declare PtrSafe Sub SetTaskbarOverlayBadgeForWin32 Lib "TaskbarProgress.dll" (ByVal badgeValue As Long, ByVal hwnd As LongPtr)
+Private Declare PtrSafe Sub SetTaskbarOverlayBadge Lib "TaskbarExtensions" (ByVal badgeValue As Long, ByVal AppID As LongPtr)           'UWPアプリ向けバッチ通知
+Private Declare PtrSafe Sub SetTaskbarOverlayBadgeForWin32 Lib "TaskbarExtensions" (ByVal badgeValue As Long, ByVal hwnd As LongPtr)    'Win32でもバッチ通知風
+Private Declare PtrSafe Sub SetTaskbarOverlayIcon Lib "TaskbarExtensions" (ByVal hwnd As LongPtr, ByVal dllPath As LongPtr, ByVal IconIndex As Long, ByVal Description As LongPtr)    'アイコンを使用したステータス表現
 
 
 
@@ -48,7 +48,6 @@ Private Const Run__Windows_UI_Notifications__CreateBadgeUpdaterForApplication As
 '* 引数　 　：BadgeID    バッジID(便宜上、数値で扱います。)
 '---------------------------------------------------------------------------------------------------
 '* 機能説明 ：要素が1つのみとシンプルのため、引数から直書きでxmlを作成します
-'* 注意事項 ：「Microsoft XML. v6.0」の参照設定が必要です
 '* URL      ：https://learn.microsoft.com/ja-jp/uwp/schemas/tiles/badgeschema/schema-root
 '***************************************************************************************************
 Private Function SetFormatBadgesNotification_Xml(BadgeID As Long) As String
@@ -99,7 +98,7 @@ End Function
 
 
 '***************************************************************************************************
-'                          ■■■ Badge表示させるコマンド文字列を返すメソッド ■■■
+'                      ■■■ Badge表示させるコマンド文字列を返すメソッド ■■■
 '***************************************************************************************************
 '* 機能     ：引数に応じたバッジ通知を表示させるコマンド文字列を返します。
 '---------------------------------------------------------------------------------------------------
@@ -109,9 +108,10 @@ End Function
 '                           PowerShellで、「Get-StartApps -Name "XXX"」と実行することで調べることが可能です。
 '---------------------------------------------------------------------------------------------------
 '* 機能説明 ：関数を呼び出すだけの簡易仕様です
-'* 注意事項 ：コマンド文字列が返るだけなので実際に実行する際は、shell関数等で実行してください。
+'* 注意事項 ：・コマンド文字列が返るだけなので実際に実行する際は、shell関数等で実行してください。
+'             ・UWPアプリしか、反応しません。
 '***************************************************************************************************
-Function BadgeUpdaterCmd(BadgeID As Long, Optional appId As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel") As String
+Function BadgeUpdaterCmd(BadgeID As Long, Optional AppID As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel") As String
 
     '1.引数に応じた、バッジのスキーマを生成し、それを読み込む。
     '2.読み込んだxmlコンテンツから、BadgeNotificationの構造を設定
@@ -120,7 +120,7 @@ Function BadgeUpdaterCmd(BadgeID As Long, Optional appId As String = "Microsoft.
     BadgeUpdaterCmd = ActionPS & WorksheetFunction.TextJoin(";", False, _
         SetFormatBadgesNotification_Xml(BadgeID), ReadXml, _
         CreateObject__Windows_UI_Notifications__BadgeNotification, _
-        "$AppId = '" & appId & Chr(39), _
+        "$AppId = '" & AppID & Chr(39), _
         Run__Windows_UI_Notifications__CreateBadgeUpdaterForApplication) & Chr(34)
 
 End Function
@@ -137,10 +137,11 @@ End Function
 '                           PowerShellで、「Get-StartApps -Name "XXX"」と実行することで調べることが可能です。
 '---------------------------------------------------------------------------------------------------
 '* 機能説明 ：関数を呼び出すだけの簡易仕様です。shell経由よりも高速です
+'* 注意事項 ：UWPアプリしか、反応しません。
 '***************************************************************************************************
-Sub BadgeUpdaterDLL(BadgeID As Long, Optional appId As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel")
+Sub BadgeUpdaterDLL(BadgeID As Long, Optional AppID As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel")
     'DLL内の関数を実行
-    SetTaskbarOverlayBadge BadgeID, StrPtr(appId)
+    SetTaskbarOverlayBadge BadgeID, StrPtr(AppID)
 End Sub
 
 '***************************************************************************************************
@@ -149,7 +150,7 @@ End Sub
 '* 引数　 　：BadgeID       バッジID(便宜上、数値で扱います。)
 '           ：hwnd          ウィンドウハンドル
 '---------------------------------------------------------------------------------------------------
-'* 機能説明 ：DeskTopアプリでも通知バッチが使えるようにしたものです。
+'* 機能説明 ：DeskTopアプリでも通知バッチが使えるようにしたものです。なお現状、数値バッチのみです
 '***************************************************************************************************
 Sub BadgeUpdaterForWin32(BadgeID As Long, Optional hwnd As LongPtr)
     '未指定ならExcelApplicationを指定
@@ -157,4 +158,22 @@ Sub BadgeUpdaterForWin32(BadgeID As Long, Optional hwnd As LongPtr)
 
     'DLL内の関数を実行
     SetTaskbarOverlayBadgeForWin32 BadgeID, hwnd
+End Sub
+
+'***************************************************************************************************
+'* 機能    ：Windows Taskbar にステータスアイコンを設定/更新します
+'---------------------------------------------------------------------------------------------------
+'* 引数　　：iconPath           アイコンデータのあるフルパス
+'            iconIndex          複数アイコンがある場合の、Index値。-1以下で、リセットします。
+'            description        アクセシビリティ向け説明文
+'            hwnd               ステータスアイコンを設定させるウィンドウハンドル
+'---------------------------------------------------------------------------------------------------
+'* 機能説明 ：好きな画像(exe,ico,dll のみ)をステータスアイコン的に扱えます。アイコン削除は、「iconIndex」を -1 以下にします
+'***************************************************************************************************
+Sub UpdateTaskbarOverlayIcon(IconPath As String, Optional IconIndex As Long, Optional Description As String, Optional hwnd As LongPtr)
+    'hwnd未指定なら、Excelを指定
+    If hwnd = 0 Then hwnd = Application.hwnd
+
+    ' DLL関数を呼び出し、タスクバーにオーバーレイアイコンを設定
+    SetTaskbarOverlayIcon hwnd, StrPtr(IconPath), IconIndex, StrPtr(Description)
 End Sub
