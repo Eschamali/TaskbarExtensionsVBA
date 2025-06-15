@@ -193,7 +193,7 @@ End Sub
 
 > [!CAUTION]
 > この機能はUWP版を前提に設計している影響で、DeskTop版では動作しません。
-> 検証時は、[こちらをインストール](https://www.microsoft.com/ja-jp/microsoft-365/excel#Plans-pricing)する必要があります。
+> 検証時は、[こちらをインストール](https://www.microsoft.com/store/productId/9WZDNCRFJBH3?ocid=libraryshare)する必要があります。
 
 ### サンプルコード
 
