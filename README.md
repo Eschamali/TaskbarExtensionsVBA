@@ -1,4 +1,4 @@
-# TaskbarProgress_VBA
+# TTaskbarExtensionsVBA
 
 Windows 7 以降で追加されたタスクバーに関するいくつかの機能を、拡張機能ファイル(dll)を経由して、VBAで操作できるようにしたものです。<br>
 [タスク バーの拡張機能 - Win32 apps | Microsoft Learn](https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions)
@@ -77,7 +77,7 @@ Office製品も同様です。
 WindowsAPIの「LoadLibrary関数」を使って、読み込みます。
 
 ```bas
-hDll = LoadLibrary("TaskbarProgress.dll")
+hDll = LoadLibrary("TaskbarExtensions.dll")
 ```
 
 実際に使う場合は、"Excelファイル(.xlsm)の存在するディレクトリ"というような[動的な場所を設定する仕組み](https://liclog.net/vba-dll-create-5/)で読み込むことをおすすめします。
@@ -95,7 +95,7 @@ Private Sub Workbook_Open()
     sFolderPath = ThisWorkbook.Path
     
     'DLLﾌｧｲﾙを読み込む
-    hDll = LoadLibrary(sFolderPath & "\" & "TaskbarProgress.dll")　'DLLファイルフルパス
+    hDll = LoadLibrary(sFolderPath & "\" & "TaskbarExtensions.dll")　'DLLファイルフルパス
 
     debug.print hDll
 End Sub
