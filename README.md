@@ -366,6 +366,8 @@ End Sub
 > [!CAUTION]
 > ProcedureAddress は、「マクロ名」による文字列名称ではなく、`AddressOf [マクロ名]` という関数ポインタで登録する必要があります。
 
+> [!NOTE]
+> `ProcedureAddress` を利用して、ボタンクリック時、そのマクロを実行すると言った仕組み作りが可能です
 
 
 ### サンプルコード
@@ -402,7 +404,7 @@ End Sub
 
 ![alt text](doc/Demo18.png)
 
-> [!TIP]
+> [!NOTE]
 > - `SetProperty_THUMBBUTTON` メソッドによる設定情報は、7つまでです。よって、追加できるボタンの最大数も7つです。
 > - 厳密には削除ではなく、非表示でボタンの増減を実現してます。
 
