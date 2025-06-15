@@ -39,7 +39,7 @@ VBAの可能性を一気に広げる選択肢になるかもしれません。
 こんな感じで、ステータスの表現が可能です。<br>
 プログレスバーと合わせて表現すると良いと思います。
 
-### [ジャンルリストのカスタム](https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions#customizing-jump-lists)
+### [ジャンプリストのカスタム](https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions#customizing-jump-lists)
 
 ![alt text](doc/Demo14.png)
 
@@ -270,20 +270,20 @@ End Sub
 > [!NOTE]
 > 現時点では、背景色の色は変えれません
 
-## ジャンルリストの登録方法
+## ジャンプリストの登録方法
 
 大まかな流れは下記になります
 
 1. [Mod05_JumplistControl.bas](doc/SampleForVBA/Modules/Mod05_JumplistControl.bas) をインポート
 2. `Registration` 関数で、必要な設定値を登録
-3. `Import` 関数で、ジャンルリストを登録
+3. `Import` 関数で、ジャンプリストを登録
 
 > [!NOTE]
-> ジャンルリストの実体は、ショートカットファイルのようなイメージです。ここで、マクロ実行はできません。
+> ジャンプリストの実体は、ショートカットファイルのようなイメージです。ここで、マクロ実行はできません。
 
 ### Registration 
 
-ここで、ジャンルリストの登録データを定義します
+ここで、ジャンプリストの登録データを定義します
 
 | 引数名           | 説明                                                                 | 既定値 |
 |------------------|----------------------------------------------------------------------| ----- |
@@ -330,7 +330,7 @@ End Sub
 > - 区切り線は、カテゴリ名 = vbnullstring のみ効果があります
 
 > [!TIP]
-> - ジャンルリストの内容をクリアする場合は、`Registration` を呼び出さすに、`Import` を呼び出すことでクリア可能です。
+> - ジャンプリストの内容をクリアする場合は、`Registration` を呼び出さすに、`Import` を呼び出すことでクリア可能です。
 > - `Import` に、Excel以外の AppUserModelID を引数に指定すると、そこに設定が反映されます。
 
 ## サムネイル ツールバーの設定方法
