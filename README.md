@@ -1,4 +1,4 @@
-# TTaskbarExtensionsVBA
+# TaskbarExtensionsVBA
 
 Windows 7 以降で追加されたタスクバーに関するいくつかの機能を、拡張機能ファイル(dll)を経由して、VBAで操作できるようにしたものです。<br>
 [タスク バーの拡張機能 - Win32 apps | Microsoft Learn](https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions)
