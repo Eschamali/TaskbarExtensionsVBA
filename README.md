@@ -105,13 +105,7 @@ hDll の中身が、0 以外であれば読み込み、成功です。
 
 ## Usage
 
-使用する際はまず、このように定義します。Office 2010以降なら、32bit,64bit 共通で下記で読み込み可能です。
-
-```bas
-Declare PtrSafe Sub SetTaskbarProgress Lib "TaskbarProgress.dll" (ByVal hwnd As LongPtr, ByVal current As Long, ByVal maximum As Long, ByVal Status As Long)
-Declare PtrSafe Sub SetTaskbarOverlayIcon Lib "TaskbarProgress.dll" (ByVal hwnd As LongPtr, ByVal dllPath As LongPtr, ByVal iconIndex As Long, ByVal description As LongPtr)
-Declare PtrSafe Sub SetTaskbarOverlayBadge Lib "TaskbarProgress.dll" (ByVal badgeValue As Long, ByVal appId As LongPtr)
-```
+基本的には、[ここにある](doc/SampleForVBA) モジュールやクラスファイルをインポートするだけで済みます。詳しい内容は、次の項で
 
 ## UpdateTaskbarProgress
 
