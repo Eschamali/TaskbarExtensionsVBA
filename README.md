@@ -103,7 +103,6 @@ End Sub
 
 hDll の中身が、0 以外であれば読み込み、成功です。
 
-
 ## Usage
 
 使用する際はまず、このように定義します。Office 2010以降なら、32bit,64bit 共通で下記で読み込み可能です。
@@ -119,7 +118,7 @@ Declare PtrSafe Sub SetTaskbarOverlayBadge Lib "TaskbarProgress.dll" (ByVal badg
 > [!IMPORTANT]
 > 事前に、[Mod04_ProgressBarTaskbar.bas](doc/SampleForVBA/Modules/Mod04_ProgressBarTaskbar.bas) のインポートをして下さい。
 
-サンプルコード
+### サンプルコード
 
 ```bas
 Sub TaskbarProgressTest()
@@ -157,7 +156,7 @@ End Sub
 > [!IMPORTANT]
 > 事前に、[Mod01_BadgeUpdateManager.bas](doc/SampleForVBA/Modules/Mod01_BadgeUpdateManager.bas) のインポートをして下さい。
 
-サンプルコード
+### サンプルコード
 
 ```bas
 Sub SetOverlayIconFromDLLExample()
@@ -202,12 +201,15 @@ End Sub
 > この機能はUWP版を前提に設計している影響で、DeskTop版では動作しません。
 > 検証時は、[こちらをインストール](https://www.microsoft.com/ja-jp/microsoft-365/excel#Plans-pricing)する必要があります。
 
-サンプルコード
+### サンプルコード
 
 ```bas
 Sub BadgeUpdaterExample()
     'DLL経由で、実行
     BadgeUpdaterDLL 30
+
+	'Shell 経由の場合(動作が遅い場合があります)
+	'Shell BadgeUpdaterCmd (30) ,vbhide
 End Sub
 ```
 
@@ -226,7 +228,7 @@ End Sub
 指定数値、識別子に応じて、バッチアイコンを変化する仕様にしています。
 詳細は、[こちら](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges)をどうぞ
 
-| 数字      | バッチアイコン                                                                             | 
+| BadgeID      | バッチアイコン                                                                             | 
 | --------- | -------------------------------------------------------------------------------- | 
 | 100以上   | ![100 Over](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-numeric-greater.png)     | 
 | 1 ~ 99    | ![1 from 99](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-numeric.png)           | 
@@ -251,6 +253,9 @@ End Sub
 
 Win32アプリでも、通知数アイコンを表示する機能です。
 
+> [!CAUTION]
+> `playing` 等のステータスアイコンは非対応です。`UpdateTaskbarOverlayIcon` で対応して下さい。
+
 ### 引数の説明
 
 | 名称            | 説明                                                                             | 既定値 |
@@ -258,15 +263,83 @@ Win32アプリでも、通知数アイコンを表示する機能です。
 | BadgeID      | 1 ~ 99 で、通知数アイコン。0 で消去です     | ※必須 |
 | hwnd           | ウィンドウハンドル | application.hend |
 
-サンプルコード
+### サンプルコード
 
 ```bas
 Sub BadgeUpdaterExample()
     BadgeUpdaterForWin32 30
 End Sub
 ```
+
 ![alt text](doc/Demo16.png)
 
+> [!NOTE]
+> 現時点では、背景色の色は変えれません
+
+## ジャンルリストの登録方法
+
+大まかな流れは下記になります
+
+1. [Mod05_JumplistControl.bas](doc/SampleForVBA/Modules/Mod05_JumplistControl.bas) をインポート
+2. `Registration` 関数で、必要な設定値を登録
+3. `Import` 関数で、ジャンルリストを登録
+
+> [!NOTE]
+> ジャンルリストの実体は、ショートカットファイルのようなイメージです。ここで、マクロ実行はできません。
+
+### Registration 
+
+ここで、ジャンルリストの登録データを定義します
+
+| 引数名           | 説明                                                                 | 既定値 |
+|------------------|----------------------------------------------------------------------| ----- |
+| 表示名           | ジャンプリストにそのまま表示される名前を指定します。                | ※必須
+| ショートカットコマンド | 起動するアプリのパスやURLを指定します。リスト項目をクリックした際に実行されます。 <br> これを省略すると、区切り線扱いとして登録されます | ※必須扱いだが、空欄可 |
+| コマンド引数     | 起動時に渡す追加の引数を指定します。例：「EXCEL.EXE /x」の「/x」など。     | vbnullstring |
+| カテゴリ名       | リストの分類名を指定します。未入力の場合は「タスク」という既定のカテゴリになります。 | vbnullstring |
+| ツールチップ      | 項目にマウスカーソルを当てたときに表示される補足説明を指定します。     | vbnullstring |
+| アイコンパス      | リスト項目の左側に表示されるアイコンのファイルパスを指定します。         | Application.Path & "\XLICONS.EXE" |
+| アイコンIndex    | アイコンファイル内に複数アイコンがある場合、その中のどれを使うかを指定します（インデックス番号）。 | 0 |
+
+![alt text](doc/Demo17.png)
+
+### サンプルコード
+
+下記を実行すると、上記画像のようになります。
+
+```bas
+Sub Demo_JumpList()
+    '-----入力件数分、ジャンプリスト登録データを追加-----
+    Registration "別インスタンスで、起動", Application.Path & "\EXCEL.EXE", "/x", "便利なExcel機能", "既存のExcelとは別プロセスで開きます"
+    Registration "Excel Online", "https://excel.cloud.microsoft/", , "便利なExcel機能", "Web 用 Excel を開きます"
+
+    Registration "Office TANAKA", "http://officetanaka.net/index.stm", , "役立つExcelサイト", "Excelのプロが運営するテクニック集のサイトです"
+    Registration "エクセルの神髄", "https://excel-ubara.com/", , "役立つExcelサイト", "エクセル(Excel)およびマクロVBA全般について入門解説から上級者に役立つ技術情報まで幅広く発信しています。"
+    Registration "日本語でコーディングするExcelVBA", "https://www.limecode.jp/", , "役立つExcelサイト", "「日本語の変数でプログラミングすれば、みんなが幸せになれる」というコンセプトの解説サイトです"
+    
+    Registration "Excel・VBA総合コミュニティ", "https://sites.google.com/view/excel-vba-fun", , , "Excel 好きが集まるDiscord コミュニティーホームページです。"
+    Registration "※区切り線", ""
+    Registration "Discordを開く", "https://discord.gg/JpWaGbSd7A", , , "Excel コミュニティーの招待リンクで開きます"
+    
+
+    '-----ジャンプリストへ追加-----
+    Import
+
+
+    '-----完了メッセージ-----
+    MsgBox "登録完了しました。タスクバーの Excel を右クリックして、ご確認ください。", vbInformation, "ジャンプリスト"
+End Sub
+```
+
+> [!CAUTION]
+> - Excelの仕様上、ファイルを開くたびに、内容がリセットされるため、恒久的な設定はできません。
+> - 区切り線は、カテゴリ名 = vbnullstring のみ効果があります
+
+> [!TIP]
+> - ジャンルリストの内容をクリアする場合は、`Registration` を呼び出さすに、`Import` を呼び出すことでクリア可能です。
+> - `Import` に、Excel以外の AppUserModelID を引数に指定すると、そこに設定が反映されます。
+
+## サムネイル ツールバーの設定方法
 
 
 # Attention
