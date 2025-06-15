@@ -303,7 +303,7 @@ End Sub
 
 ![alt text](doc/Demo17.png)
 
-### サンプルコード
+#### サンプルコード
 
 下記を実行すると、上記画像のようになります。
 
@@ -341,8 +341,81 @@ End Sub
 
 ## サムネイル ツールバーの設定方法
 
+大まかな流れは下記になります
+
+1. [ClsThumbButton.cls](doc\SampleForVBA\Class\ClsThumbButton.cls) をインポート
+2. `InstallationButton` メソッドで、初期化
+3. `SetProperty_THUMBBUTTON` メソッドで、必要な設定値を登録
+4. `UpdateButton` メソッドで、対応する設定値を反映
+
+### InstallationButton
+
+ウィンドウハンドルを指定して初期化を行います。基本は、`Application.hwnd` でOKです。
+
+> [!CAUTION]
+> この初期化は、アクティブブックに対して、1回までにすること。セルに現在の `Application.hwnd` を残す等で、2回以上呼び出さないように工夫する必要があります。
+
+### SetProperty_THUMBBUTTON
+
+ボタンの設定情報を登録します。
+
+#### 引数の説明
+
+| 引数名         | 説明         | 既定値 |
+|----------------|--------------------|---------|
+| ProcedureAddress | VBA内のプロシージャ名アドレス | ※必須 |
+| iconPath         | アイコンデータのあるフルパス | Application.Path & "\XLICONS.EXE" |
+| iconIndex        | 複数アイコンがある場合の、Index値。| 0 |
+| ButtonType       | [詳細はこちら](https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ne-shobjidl_core-thumbbuttonflags) | THBF_ENABLED |
+| description      | ボタンにカーソルを当てた際のツールチップ | vbnullstring |
+
+> [!CAUTION]
+> ProcedureAddress は、「マクロ名」による文字列名称ではなく、`AddressOf [マクロ名]` という関数ポインタで登録する必要があります。
+
+
+
+### サンプルコード
+
+次のコードは、1つのボタンを追加し、そのボタンを押下すると、マクロ `Run01FromThumbnailToolbars` が実行されます。`InstallationButton` の2重実行を考慮してないので各自で工夫して下さい。
+
+```bas
+Sub Demo_ThumbnailToolbars()
+    '必要な変数を定義
+    Dim タスクバーボタン As New ClsThumbButton
+
+    '設定を施す
+    With タスクバーボタン
+        'アクティブBookに対するハンドルに、ボタン設定を初期化(各アクティブな hwnd につき、1度のみ呼び出すこと)
+        .InstallationButton = Application.hwnd
+        
+        '1個設定
+        .SetProperty_THUMBBUTTON(AddressOf Run01FromThumbnailToolbars, , , , "クリックしてマクロ発動") = 1
+
+        '設定を反映
+        .UpdateButton = 1
+
+		'通知させる
+        MsgBox "登録完了しました。タスクバーの Excel にカーソルをあわせて、ご確認ください。", vbInformation, "サムネイルツールバー"
+    End With
+End Sub
+
+
+'サムネイルツールバーから起動させるマクロ
+Sub Run01FromThumbnailToolbars()
+    MsgBox "1つ目のボタンを押しました", vbInformation, "Pushed"
+End Sub
+```
+
+![alt text](doc/Demo18.png)
+
+> [!TIP]
+> - `SetProperty_THUMBBUTTON` メソッドによる設定情報は、7つまでです。よって、追加できるボタンの最大数も7つです。
+> - 厳密には削除ではなく、非表示でボタンの増減を実現してます。
+
+> [!CAUTION]
+> アイコンなしでも登録可能ですが、一度でもアイコンを設定すると後から、削除ができません。アイコンパス変更は可能です。
+
 
 # Attention
 DLL側の処理は、ある程度のエラー処理を施していますが、決して完璧ではありません。<br>
-そのため、DLLの関数を直接呼ぶのではなく、VBAの標準モジュール内のプロシージャを介して、エラー処理をしつつ、呼び出すことを推奨します。最近のPCであれば、誤差レベルです。<br>
-また、Win32APIの文字列関係はほとんど、文字列へのポインターによって取得されるため、毎度 StrPtr を記述するのは大変なので、プロシージャを介した作りにするといいでしょう。
+そのため、DLLの関数を直接呼ぶのではなく、VBAの標準モジュール内のプロシージャを介して、エラー処理をしつつ、呼び出すことを推奨します。最近のPCであれば、誤差レベルです。

@@ -19,8 +19,8 @@ Option Explicit
 '***************************************************************************************************
 '* 機能    ：C++で書かれたDLLに、 ITaskbarList3 インターフェイスのサムネイルツールバー 関連の処理を埋め込ませ、機能を拡張します
 '***************************************************************************************************
-Private Declare PtrSafe Sub InitializeThumbnailButton Lib "TaskbarProgress.dll" (ByVal NumberSecured As Long, ByVal hwnd As LongPtr)
-Private Declare PtrSafe Sub UpdateThumbnailButton Lib "TaskbarProgress.dll" (ByRef TargetUpdata As THUMBBUTTONDATA, ByVal hwnd As LongPtr)
+Private Declare PtrSafe Sub InitializeThumbnailButton Lib "TaskbarExtensions" (ByVal hwnd As LongPtr)
+Private Declare PtrSafe Sub UpdateThumbnailButton Lib "TaskbarExtensions" (ByRef TargetUpdata As THUMBBUTTONDATA, ByVal ProcedureAddressOf As LongPtr)
 
 
 
@@ -56,7 +56,7 @@ Private SettingTHUMBBUTTON(1 To MAX_BUTTONS)    As THUMBBUTTON  'ボタン情報
 
 '---------------------------クラスエラー番号用定数------------------------------
 Private Const ErrorValue_範囲外THUMBBUTTON      As Long = 1
-Private Const ErrorNAme_範囲外THUMBBUTTON       As String = "THUMBBUTTON 範囲外"
+Private Const ErrorName_範囲外THUMBBUTTON       As String = "THUMBBUTTON 範囲外"
 
 '---------------------------クラスユーザー定義型------------------------------
 'VBA向け構造体作成
@@ -102,7 +102,7 @@ Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optiona
 
     '範囲外なら、エラーで、止める
     If ButtonIndex < 1 Or ButtonIndex > MAX_BUTTONS Then
-        Err.Raise vbObjectError + ErrorValue_範囲外THUMBBUTTON, ErrorNAme_範囲外THUMBBUTTON, "ボタンインデックスは 1 ～ 7 にしてください。"
+        Err.Raise vbObjectError + ErrorValue_範囲外THUMBBUTTON, ErrorName_範囲外THUMBBUTTON, "ボタンインデックスは 1 ～ 7 にしてください。"
     Else
         '範囲内なら、設定する。
         With SettingTHUMBBUTTON(ButtonIndex)
@@ -127,7 +127,7 @@ End Property
 Public Property Let ClearProperty_THUMBBUTTON(ButtonIndex As Long)
     '範囲外なら、エラーで、止める
     If ButtonIndex < 0 Or ButtonIndex > MAX_BUTTONS Then
-        Err.Raise vbObjectError + ErrorValue_範囲外THUMBBUTTON, ErrorNAme_範囲外THUMBBUTTON, "ボタンインデックスは 1 ～ 7 にしてください。"
+        Err.Raise vbObjectError + ErrorValue_範囲外THUMBBUTTON, ErrorName_範囲外THUMBBUTTON, "ボタンインデックスは 1 ～ 7 にしてください。"
     ElseIf ButtonIndex = 0 Then
         '0の場合は、ALL Reset
         For ButtonIndex = 1 To MAX_BUTTONS
@@ -178,9 +178,6 @@ End Function
 '* 注意事項：非表示として確保するためこれだけでは見た目上、何も起こりません
 '***************************************************************************************************
 Public Property Let InstallationButton(WindowHwnd As LongPtr)
-    '未指定ならExcelApplicationを指定
-    If WindowHwnd = 0 Then WindowHwnd = Application.hwnd
-    
     'DLL内の関数を実行
     InitializeThumbnailButton WindowHwnd
 End Property
