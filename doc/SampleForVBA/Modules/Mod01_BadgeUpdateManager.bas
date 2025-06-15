@@ -40,6 +40,27 @@ Private Const Run__Windows_UI_Notifications__CreateBadgeUpdaterForApplication As
 
 
 '***************************************************************************************************
+'                          ■■■ Badgeを構成するパラメーター ■■■
+'***************************************************************************************************
+Enum BadgeValueID
+    bv_none = -13
+    bv_attention
+    bv_error
+    bv_unavailable
+    bv_playing
+    bv_paused
+    bv_newMessage
+    bv_busy
+    bv_away
+    bv_available
+    bv_alarm
+    bv_alert
+    bv_activity
+End Enum
+
+
+
+'***************************************************************************************************
 '                          ■■■ Badgeを構成するxmlコンテンツ生成 ■■■
 '***************************************************************************************************
 '* 機能     ：コマンドプロンプト(shell関数など)で認識できるように、xmlコンテンツを整形し、それをセットするコマンド文字列を生成します
@@ -111,7 +132,7 @@ End Function
 '* 注意事項 ：・コマンド文字列が返るだけなので実際に実行する際は、shell関数等で実行してください。
 '             ・UWPアプリしか、反応しません。
 '***************************************************************************************************
-Function BadgeUpdaterCmd(BadgeID As Long, Optional AppID As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel") As String
+Function BadgeUpdaterCmd(BadgeID As BadgeValueID, Optional AppID As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel") As String
 
     '1.引数に応じた、バッジのスキーマを生成し、それを読み込む。
     '2.読み込んだxmlコンテンツから、BadgeNotificationの構造を設定
@@ -139,7 +160,7 @@ End Function
 '* 機能説明 ：関数を呼び出すだけの簡易仕様です。shell経由よりも高速です
 '* 注意事項 ：UWPアプリしか、反応しません。
 '***************************************************************************************************
-Sub BadgeUpdaterDLL(BadgeID As Long, Optional AppID As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel")
+Sub BadgeUpdaterDLL(BadgeID As BadgeValueID, Optional AppID As String = "Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel")
     'DLL内の関数を実行
     SetTaskbarOverlayBadge BadgeID, StrPtr(AppID)
 End Sub
