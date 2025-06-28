@@ -357,18 +357,15 @@ End Sub
 
 | 引数名         | 説明         | 既定値 |
 |----------------|--------------------|---------|
-| ProcedureAddress | VBA内のプロシージャ名アドレス | ※必須 |
+| ProcedureName | VBE内のプロシージャ名 | ※必須 |
 | iconPath         | アイコンデータのあるフルパス | Application.Path & "\XLICONS.EXE" |
 | iconIndex        | 複数アイコンがある場合の、Index値。| 0 |
 | ButtonType       | [詳細はこちら](https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ne-shobjidl_core-thumbbuttonflags) | THBF_ENABLED |
 | description      | ボタンにカーソルを当てた際のツールチップ | vbnullstring |
 
 > [!CAUTION]
-> ProcedureAddress は、「マクロ名」による文字列名称ではなく、`AddressOf [マクロ名]` という関数ポインタで登録する必要があります。
-
-> [!NOTE]
-> `ProcedureAddress` を利用して、ボタンクリック時、そのマクロを実行すると言った仕組み作りが可能です
-
+> できるだけ、ブック内にてプロシージャ名は、ユニークにしてください。  
+> どーーしてもなら、`Module1.Run01FromThumbnailToolbars` という書き方でも動作します。
 
 ### サンプルコード
 
@@ -385,7 +382,7 @@ Sub Demo_ThumbnailToolbars()
         .InstallationButton = Application.hwnd
         
         '1個設定
-        .SetProperty_THUMBBUTTON(AddressOf Run01FromThumbnailToolbars, , , , "クリックしてマクロ発動") = 1
+        .SetProperty_THUMBBUTTON("Run01FromThumbnailToolbars", , , , "クリックしてマクロ発動") = 1
 
         '設定を反映
         .UpdateButton = 1
