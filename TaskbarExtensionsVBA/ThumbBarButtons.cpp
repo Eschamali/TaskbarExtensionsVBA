@@ -30,7 +30,11 @@ static ITaskbarList3* g_taskbar = nullptr;                              //ITaskb
 static THUMBBUTTON g_btns[MAX_BUTTONS] = {};                            //ボタン情報格納用
 static std::wstring g_procNames[MAX_BUTTONS];                           //コールバック用プロシージャ名の格納用
 static HWND g_hwnd = nullptr;                                           //InitializeThumbnailButton で呼び出したウィンドウハンドルを保持します
-static VbaCallback g_thumbButtonCallbacks[MAX_BUTTONS] = { nullptr };   //各ボタン用の関数(VBA内プロシージャ)ポインタを7つ保持
+
+constexpr const wchar_t* EXCEL_DESK_CLASS_NAME = L"XLDESK";                 //"XLMAIN"ウィンドウの子名称
+constexpr const wchar_t* EXCEL_SHEET_CLASS_NAME = L"EXCEL7";                //"XLDESK"の子名称
+constexpr const wchar_t* EXCEL_APPLICATION_CLASS_NAME = L"Application";     //"Application"のオブジェクト名称
+constexpr const wchar_t* EXCEL_APPLICATION_RUN_MethodName = L"Run";         //"Application.Run"のメソッド名称
 
 
 
@@ -66,6 +70,194 @@ static void EnsureTaskbarInterface()
 }
 
 //***************************************************************************************************
+//* 機能　　：引数に従った Application オブジェクトを取得します
+//---------------------------------------------------------------------------------------------------
+//* 引数　　：※割愛します
+//---------------------------------------------------------------------------------------------------
+//* 詳細説明：WorkbookからApplicationを取得するために使います
+//***************************************************************************************************
+static HRESULT GetProperty(IDispatch* pDisp, const wchar_t* propName, CComVariant& result) {
+    if (!pDisp) return E_POINTER;
+    OLECHAR* name = (OLECHAR*)propName;
+    DISPID dispID;
+    HRESULT hr = pDisp->GetIDsOfNames(IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispID);
+    if (FAILED(hr)) return hr;
+    DISPPARAMS params = { NULL, NULL, 0, 0 };
+    return pDisp->Invoke(dispID, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_PROPERTYGET, &params, &result, NULL, NULL);
+}
+
+//***************************************************************************************************
+//* 機能　　 ：引数にあるインデックスを基に、VBA マクロを実行します
+//---------------------------------------------------------------------------------------------------
+//* 引数　 　：Index     プロシージャ名があるIndex値
+//***************************************************************************************************
+void ExecuteVBAProcByIndex(int index) {
+    //1.プロシージャ名未登録あるいは、インデックスの範囲外なら、ここで終了
+    if (index < 0 || index >= 7 || g_procNames[index].empty()) return;
+
+    //2.COMの初期化
+    HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (hrInit == RPC_E_CHANGED_MODE) {
+        // 既に異なるアパートメント モードで初期化されている場合は、そのまま続行
+        MessageBoxW(nullptr, L"既に異なるアパートメント モードで初期化済み", L"INFO", MB_OK);
+    }
+    else if (FAILED(hrInit)) {
+        wchar_t errorMsg[256];
+        swprintf_s(errorMsg, 256, L"COM初期化に失敗しました。HRESULT: 0x%08X", hrInit);
+        MessageBoxW(nullptr, errorMsg, L"エラー", MB_OK);
+        return;
+    }
+
+    //wchar_t title[256];
+    //GetWindowTextW(g_hwnd, title, 256);
+    //MessageBoxW(nullptr, title, L"対象ウィンドウのタイトル", MB_OK);
+
+    //wchar_t className[256];
+    //GetClassNameW(g_hwnd, className, 256);
+    //MessageBoxW(nullptr, className, L"対象ウィンドウのクラス名", MB_OK);
+
+    //MessageBoxW(nullptr, g_procNames[index].c_str(), L"対象のプロシージャ名", MB_OK);
+
+
+    //---------- 3. 孫ウィンドウ経由で、Excel Applicationオブジェクト取得 ----------
+    CComPtr<IDispatch> pExcelDispatch;
+    HRESULT hr = E_FAIL; // 見つからなかった場合のデフォルト
+
+    // 3 - 1. XLMAINウィンドウの子である「XLDESK」ウィンドウを探す
+    HWND hXlDesk = FindWindowExW(g_hwnd, NULL, EXCEL_DESK_CLASS_NAME, NULL);
+    if (hXlDesk) {
+        // 3 - 2. XLDESKの子である「EXCEL7」ウィンドウを探す
+        HWND hExcel7 = FindWindowExW(hXlDesk, NULL, EXCEL_SHEET_CLASS_NAME, NULL);
+        if (hExcel7) {
+            // 3 - 4. EXCEL7ウィンドウから直接Workbookオブジェクトを取得
+            CComPtr<IDispatch> pWorkbookDisp;
+            hr = AccessibleObjectFromWindow(hExcel7, OBJID_NATIVEOM, IID_IDispatch, (void**)&pWorkbookDisp);
+
+            if (SUCCEEDED(hr) && pWorkbookDisp) {
+                // 3 - 5. WorkbookオブジェクトからApplicationオブジェクトを取得
+                CComVariant varApp;
+                hr = GetProperty(pWorkbookDisp, EXCEL_APPLICATION_CLASS_NAME, varApp);
+                if (SUCCEEDED(hr) && varApp.vt == VT_DISPATCH) {
+                    pExcelDispatch = varApp.pdispVal; // 成功！
+                }
+            }
+        }
+        else {
+            hr = HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+        }
+    }
+    else {
+        hr = HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+    }
+    // --- ここまで ---
+
+    if (SUCCEEDED(hr) && pExcelDispatch) {
+        //成功！
+    }
+    else {
+        _com_error err(hr);
+        wchar_t buf[512];
+        const wchar_t* reason = L"不明なエラー";
+        if (!hXlDesk) reason = L"子ウィンドウ 'XLDESK' が見つかりません";
+        else if (!FindWindowExW(hXlDesk, NULL, L"EXCEL7", NULL)) reason = L"孫ウィンドウ 'EXCEL7' が見つかりません";
+        else reason = L"EXCEL7からオブジェクト取得に失敗しました";
+
+        swprintf_s(buf, L"エラー理由: %s\nHRESULT=0x%08X\n%s", reason, hr, err.ErrorMessage());
+        MessageBoxW(nullptr, buf, L"エラー", MB_OK);
+
+        return;
+    }
+
+    // 4. "Run"メソッドのDISPIDを取得する
+    DISPID dispidRun;
+    OLECHAR* runMethodName = const_cast<OLECHAR*>(EXCEL_APPLICATION_RUN_MethodName); // 実行するメソッド名(VBAのApplication.Run 相当)
+    hr = pExcelDispatch->GetIDsOfNames(IID_NULL, &runMethodName, 1, LOCALE_USER_DEFAULT, &dispidRun);
+
+    //　Runメソッドの取得に失敗した場合
+    if (FAILED(hr)) {
+        MessageBoxW(nullptr, L"Failed to get DISPID for Run method", L"Error", MB_OK);
+        return;
+    }
+
+    // 5. Application.Run メソッドの引数を設定
+    CComVariant macroNameArg(g_procNames[index].c_str());   //引数として渡すのは、VBA側で整形した「'ブック名'!プロシージャ名」
+
+    // 6. Application.Run を呼び出す準備
+    CComVariant argsArray[1] = { macroNameArg };
+    DISPPARAMS params = { argsArray, nullptr, 1, 0 };
+
+    // 7. "Run"メソッドを起動する
+    //　詳細メッセージ、取得用
+    EXCEPINFO excepInfo;
+    memset(&excepInfo, 0, sizeof(EXCEPINFO));
+
+    CComVariant result;
+    hr = pExcelDispatch->Invoke(dispidRun, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD,&params, &result, &excepInfo, nullptr);
+
+
+    //-------------以降は、デバッグ用-------------
+    //if (FAILED(hr)) {
+    //    // ... 万が一のInvokeエラー処理 ...
+    //    _com_error err(hr);
+    //    wchar_t errorMsg[256];
+    //    swprintf_s(errorMsg, 256, L"HRESULT: 0x%08X", hr);
+    //    MessageBoxW(nullptr, errorMsg, L"エラー", MB_OK);
+
+    //    swprintf_s(errorMsg, 256, L"%s", err.ErrorMessage());
+    //    MessageBoxW(nullptr, errorMsg, L"根本的エラー", MB_OK);
+
+    //}
+
+    // 現在のExcelインスタンス内に、指定マクロがないと想定
+    //if (FAILED(hr)) {
+    //    MessageBoxW(nullptr, L"Failed to get Excel macro", L"Error", MB_OK);
+    //}
+
+    ////MessageBoxでDISPPARAMSの内容を確認
+    //std::wstring debugMessage;
+
+    //// cArgsの確認
+    //debugMessage += L"Number of arguments: " + std::to_wstring(params.cArgs) + L"\n";
+
+    //// rgvarg の中身を文字列化
+    //for (UINT i = 0; i < params.cArgs; ++i) {
+    //    VARIANT& arg = params.rgvarg[i];
+
+    //    if (arg.vt == VT_BSTR) {
+    //        debugMessage += L"Argument " + std::to_wstring(i) + L": " + arg.bstrVal + L"\n";
+    //    }
+    //    else {
+    //        debugMessage += L"Argument " + std::to_wstring(i) + L": [not a BSTR]\n";
+    //    }
+    //}
+
+    //// rgvarg の中身を確認
+    //MessageBoxW(nullptr, debugMessage.c_str(), L"DISPPARAMS Debug", MB_OK);
+
+    ////エラーが起こったら、エラーコードと詳細メッセージ(ある場合)を表示。
+    //if (FAILED(hr)) {
+    //    std::wstring errorMessage = L"Invoke failed. HRESULT: " + std::to_wstring(hr);
+
+    //    if (excepInfo.bstrDescription) {
+    //        errorMessage += L"\nException: " + std::wstring(excepInfo.bstrDescription);
+    //        SysFreeString(excepInfo.bstrDescription);  // リソース解放
+    //    }
+
+    //    MessageBoxW(nullptr, errorMessage.c_str(), L"Error1", MB_OK);
+    //}
+    //else {
+    //    _com_error err(hr);
+    //    MessageBoxW(nullptr, err.ErrorMessage(), L"Info", MB_OK);
+    //}
+
+    //-------------ここまでが、デバッグ用-------------
+
+    if (SUCCEEDED(hrInit)) {
+        CoUninitialize();
+    }
+}
+
+//***************************************************************************************************
 //* 機能　　 ：事前に設定した hwnd に起きたことが、全部ここに届きます。
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　：hwnd      メッセージを受け取ったウィンドウのハンドル(サブクラスに登録したhwnd)
@@ -81,22 +273,22 @@ static LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     switch (msg)
     {
         //タスクバーのサムネイルボタンをクリックすると、Windows は WM_COMMAND メッセージを送ってきます。
-    case WM_COMMAND:
-        //このイベントはボタンがクリックされた通知か判定します(今回は THBN_CLICKED となる)
-        if (HIWORD(wParam) == THBN_CLICKED) {
-            //補正処理
-            int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
+        case WM_COMMAND:
+            //このイベントはボタンがクリックされた通知か判定します(今回は THBN_CLICKED となる)
+            if (HIWORD(wParam) == THBN_CLICKED) {
+                //補正処理
+                int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
 
-            //VBA内のプロシージャ名のポインタを直接実行する
-            g_thumbButtonCallbacks[buttonIndex]();
-            return 0;
-        }
+                //VBA内のプロシージャ名を実行する準備へ
+                ExecuteVBAProcByIndex(buttonIndex);
+                return 0;
+            }
 
-        break;
+            break;
 
         //他のイベントは、何もしません
-    default:
-        break;
+        default:
+            break;
     }
 
     //他のイベントは、既定の処理へ
@@ -144,9 +336,9 @@ void __stdcall InitializeThumbnailButton(HWND hwnd)
 //* 機能　　 ： 指定したウィンドウハンドルにボタン情報を変更します。
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　： data     ユーザー定義型：THUMBBUTTONDATA
-//              callback 呼び出すVBA内のプロシージャ名のポインタ
+//              callback 呼び出すVBA内のプロシージャ名
 //***************************************************************************************************
-void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback)
+void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, const wchar_t* callback)
 {
     //初期化
     EnsureTaskbarInterface();
@@ -177,8 +369,8 @@ void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback ca
     }
     btn.hIcon = hIcon;
 
-    // コールバック用にプロシージャ名のポインタを保持
-    g_thumbButtonCallbacks[data->ButtonIndex - ButtonID_Correction] = callback;
+    // コールバック用にプロシージャ名を保持
+    g_procNames[data->ButtonIndex - ButtonID_Correction] = callback;
 
     //変更を適用
     g_taskbar->ThumbBarUpdateButtons(g_hwnd, MAX_BUTTONS, g_btns);

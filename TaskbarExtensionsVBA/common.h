@@ -24,8 +24,6 @@
 #endif
 
 
-//関数ポインタの型を定義し、VBA内のプロシージャ名を呼び出せるようにする
-typedef void(__stdcall* VbaCallback)();
 
 //イベントビュアーのSource名用
 static constexpr const wchar_t* SourceName = L"TaskbarExtensions.dll";
@@ -64,6 +62,6 @@ extern "C" TaskbarExtensions_API void __stdcall SetTaskbarOverlayIcon(HWND hwnd,
 extern "C" TaskbarExtensions_API void __stdcall SetTaskbarOverlayBadge(int badgeValue, const wchar_t* appUserModelID);
 extern "C" TaskbarExtensions_API void __stdcall SetTaskbarOverlayBadgeForWin32(LONG badgeValue, HWND hwnd);
 extern "C" TaskbarExtensions_API void __stdcall InitializeThumbnailButton(HWND hwnd);
-extern "C" TaskbarExtensions_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, VbaCallback callback);
+extern "C" TaskbarExtensions_API void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, const wchar_t* callback);
 extern "C" TaskbarExtensions_API void __stdcall AddJumpListTask(const JumpListData* data);
 extern "C" TaskbarExtensions_API void __stdcall CommitJumpList(const wchar_t* ApplicationModelUserID);

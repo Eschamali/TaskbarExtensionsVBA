@@ -61,20 +61,20 @@ Private Const ErrorName_範囲外THUMBBUTTON       As String = "THUMBBUTTON 範�
 '---------------------------クラスユーザー定義型------------------------------
 'VBA向け構造体作成
 Private Type THUMBBUTTON
-    ProcedureAddress    As LongPtr  'VBA内のプロシージャ名のポインタ
+    ProcedureAddress    As LongPtr  'VBA内のプロシージャ名文字列のポインタ
     ButtonType          As Long     'ボタン制御コード
     IconPath            As String   'アイコンのパス
-    IconIndex           As Long     'アイコンインデックス
-    Description         As String   'ツールチップ
+    iconIndex           As Long     'アイコンインデックス
+    description         As String   'ツールチップ
     ButtonIndex         As Long     'ボタン位置
 End Type
 
 'DLL向け構造体作成
 Private Type THUMBBUTTONDATA
     IconPath            As LongPtr  'ボタン制御コード
-    Description         As LongPtr  'アイコンのパス
+    description         As LongPtr  'アイコンのパス
     ButtonType          As Long     'アイコンインデックス
-    IconIndex           As Long     'ツールチップ
+    iconIndex           As Long     'ツールチップ
     ButtonIndex         As Long     'ボタン位置
 End Type
 
@@ -87,16 +87,15 @@ End Type
 '---------------------------------------------------------------------------------------------------
 '* 返り値  ：ボタンを定義一覧情報が詰まった2次元配列
 '* 引数　　：ButtonIndex        追加位置
-'            ProcedureAddress   VBA内のプロシージャ名アドレス
+'            ProcedureName      VBA内のプロシージャ名
 '            ButtonType         ボタンの挙動
 '            iconPath           アイコンデータのあるフルパス
 '            iconIndex          複数アイコンがある場合の、Index値。
 '            description        ボタンにカーソルを当てた際のツールチップ
 '---------------------------------------------------------------------------------------------------
-'* 注意事項 ：アドレスで、プロシージャ情報を渡してる都合上、その処理を変えたら再度、「UpdateThumbnailButton」で更新する必要があります
 '* URL      ：https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ns-shobjidl_core-thumbbutton
 '***************************************************************************************************
-Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optional ByVal IconPath As String, Optional ByVal IconIndex As Long, Optional ByVal ButtonType As THUMBBUTTONFLAGS, Optional ByVal Description As String, ButtonIndex As Long)
+Public Property Let SetProperty_THUMBBUTTON(ByVal ProcedureName As String, Optional ByVal IconPath As String, Optional ByVal iconIndex As Long, Optional ByVal ButtonType As THUMBBUTTONFLAGS, Optional ByVal description As String, ButtonIndex As Long)
     'アイコン未指定時は、Excelのアイコンセットをパスにする
     If IconPath = "" Then IconPath = Application.Path & "\XLICONS.EXE"
 
@@ -108,10 +107,10 @@ Public Property Let SetProperty_THUMBBUTTON(ProcedureAddress As LongPtr, Optiona
         With SettingTHUMBBUTTON(ButtonIndex)
             .ButtonIndex = ButtonIndex
             .ButtonType = ButtonType
-            .Description = Description
-            .IconIndex = IconIndex
+            .description = description
+            .iconIndex = iconIndex
             .IconPath = IconPath
-            .ProcedureAddress = ProcedureAddress
+            .ProcedureAddress = StrPtr(ProcedureName)
         End With
     End If
 End Property
@@ -157,11 +156,11 @@ Private Function UseDLL_THUMBBUTTON(Target As THUMBBUTTON) As THUMBBUTTONDATA
     With UseDLL_THUMBBUTTON
         '文字列に関するパラメーター　LongPtrを使うことで、ポインタから文字列を取得するようにします。
         .IconPath = StrPtr(Target.IconPath)
-        .Description = StrPtr(Target.Description)
+        .description = StrPtr(Target.description)
         
         '数値
         .ButtonType = Target.ButtonType
-        .IconIndex = Target.IconIndex
+        .iconIndex = Target.iconIndex
         .ButtonIndex = Target.ButtonIndex + ButtonID_Correction
     End With
 End Function
