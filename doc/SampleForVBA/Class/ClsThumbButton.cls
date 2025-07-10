@@ -19,7 +19,7 @@ Option Explicit
 '***************************************************************************************************
 '* 機能    ：C++で書かれたDLLに、 ITaskbarList3 インターフェイスのサムネイルツールバー 関連の処理を埋め込ませ、機能を拡張します
 '***************************************************************************************************
-Private Declare PtrSafe Sub InitializeThumbnailButton Lib "TaskbarExtensions" (ByVal hwnd As LongPtr)
+Private Declare PtrSafe Sub InitializeThumbnailButton Lib "TaskbarExtensions" (ByVal Hwnd As LongPtr)
 Private Declare PtrSafe Sub UpdateThumbnailButton Lib "TaskbarExtensions" (ByRef TargetUpdata As THUMBBUTTONDATA, ByVal ProcedureAddressOf As LongPtr)
 
 
@@ -67,14 +67,16 @@ Private Type THUMBBUTTON
     iconIndex           As Long     'アイコンインデックス
     description         As String   'ツールチップ
     ButtonIndex         As Long     'ボタン位置
+    TargetHwnd          As LongPtr  'ハンドル値
 End Type
 
 'DLL向け構造体作成
 Private Type THUMBBUTTONDATA
-    IconPath            As LongPtr  'ボタン制御コード
-    description         As LongPtr  'アイコンのパス
-    ButtonType          As Long     'アイコンインデックス
-    iconIndex           As Long     'ツールチップ
+    IconPath            As LongPtr  'アイコンのパス
+    description         As LongPtr  'ツールチップ
+    TargetHwnd          As LongPtr  'ハンドル値
+    ButtonType          As Long     'ボタン制御コード
+    iconIndex           As Long     'アイコンインデックス
     ButtonIndex         As Long     'ボタン位置
 End Type
 
@@ -91,11 +93,12 @@ End Type
 '            ButtonType         ボタンの挙動
 '            iconPath           アイコンデータのあるフルパス
 '            iconIndex          複数アイコンがある場合の、Index値。
+'            TargetHwnd         反映先のハンドル値。
 '            description        ボタンにカーソルを当てた際のツールチップ
 '---------------------------------------------------------------------------------------------------
 '* URL      ：https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ns-shobjidl_core-thumbbutton
 '***************************************************************************************************
-Public Property Let SetProperty_THUMBBUTTON(ByVal ProcedureName As String, Optional ByVal IconPath As String, Optional ByVal iconIndex As Long, Optional ByVal ButtonType As THUMBBUTTONFLAGS, Optional ByVal description As String, ButtonIndex As Long)
+Public Property Let SetProperty_THUMBBUTTON(ByVal ProcedureName As String, Optional ByVal IconPath As String, Optional ByVal iconIndex As Long, Optional ByVal ButtonType As THUMBBUTTONFLAGS, Optional ByVal description As String, Optional TargetHwnd As LongPtr, ButtonIndex As Long)
     'アイコン未指定時は、Excelのアイコンセットをパスにする
     If IconPath = "" Then IconPath = Application.Path & "\XLICONS.EXE"
 
@@ -111,6 +114,8 @@ Public Property Let SetProperty_THUMBBUTTON(ByVal ProcedureName As String, Optio
             .iconIndex = iconIndex
             .IconPath = IconPath
             .ProcedureAddress = StrPtr(ProcedureName)
+            '未指定の場合は、Excelのハンドル値
+            If TargetHwnd = 0 Then .TargetHwnd = Application.Hwnd Else .TargetHwnd = TargetHwnd
         End With
     End If
 End Property
@@ -157,6 +162,9 @@ Private Function UseDLL_THUMBBUTTON(Target As THUMBBUTTON) As THUMBBUTTONDATA
         '文字列に関するパラメーター　LongPtrを使うことで、ポインタから文字列を取得するようにします。
         .IconPath = StrPtr(Target.IconPath)
         .description = StrPtr(Target.description)
+        
+        'ハンドル
+        .TargetHwnd = Target.TargetHwnd
         
         '数値
         .ButtonType = Target.ButtonType

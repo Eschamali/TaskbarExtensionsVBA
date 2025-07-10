@@ -36,6 +36,7 @@ struct THUMBBUTTONDATA
 {
     const wchar_t* IconPath;
     const wchar_t* Description;
+    HWND TargetHwnd;
     LONG ButtonType;
     LONG IconIndex;
     LONG ButtonIndex;

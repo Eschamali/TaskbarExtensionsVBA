@@ -29,7 +29,6 @@ static constexpr int ButtonID_Correction = 1001;                        //ボタ
 static ITaskbarList3* g_taskbar = nullptr;                              //ITaskbarList3オブジェクト
 static THUMBBUTTON g_btns[MAX_BUTTONS] = {};                            //ボタン情報格納用
 static std::wstring g_procNames[MAX_BUTTONS];                           //コールバック用プロシージャ名の格納用
-static HWND g_hwnd = nullptr;                                           //InitializeThumbnailButton で呼び出したウィンドウハンドルを保持します
 
 constexpr const wchar_t* EXCEL_DESK_CLASS_NAME = L"XLDESK";                 //"XLMAIN"ウィンドウの子名称
 constexpr const wchar_t* EXCEL_SHEET_CLASS_NAME = L"EXCEL7";                //"XLDESK"の子名称
@@ -91,7 +90,7 @@ static HRESULT GetProperty(IDispatch* pDisp, const wchar_t* propName, CComVarian
 //---------------------------------------------------------------------------------------------------
 //* 引数　 　：Index     プロシージャ名があるIndex値
 //***************************************************************************************************
-void ExecuteVBAProcByIndex(int index) {
+static void ExecuteVBAProcByIndex(int index, HWND targetHwnd) {
     //1.プロシージャ名未登録あるいは、インデックスの範囲外なら、ここで終了
     if (index < 0 || index >= 7 || g_procNames[index].empty()) return;
 
@@ -124,7 +123,7 @@ void ExecuteVBAProcByIndex(int index) {
     HRESULT hr = E_FAIL; // 見つからなかった場合のデフォルト
 
     // 3 - 1. XLMAINウィンドウの子である「XLDESK」ウィンドウを探す
-    HWND hXlDesk = FindWindowExW(g_hwnd, NULL, EXCEL_DESK_CLASS_NAME, NULL);
+    HWND hXlDesk = FindWindowExW(targetHwnd, NULL, EXCEL_DESK_CLASS_NAME, NULL);
     if (hXlDesk) {
         // 3 - 2. XLDESKの子である「EXCEL7」ウィンドウを探す
         HWND hExcel7 = FindWindowExW(hXlDesk, NULL, EXCEL_SHEET_CLASS_NAME, NULL);
@@ -280,7 +279,7 @@ static LRESULT CALLBACK SubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 int buttonIndex = LOWORD(wParam) - ButtonID_Correction;
 
                 //VBA内のプロシージャ名を実行する準備へ
-                ExecuteVBAProcByIndex(buttonIndex);
+                ExecuteVBAProcByIndex(buttonIndex, hwnd);
                 return 0;
             }
 
@@ -324,9 +323,6 @@ void __stdcall InitializeThumbnailButton(HWND hwnd)
 
     //反映処理
     g_taskbar->ThumbBarAddButtons(hwnd, MAX_BUTTONS, g_btns);
-
-    // HWND を保持
-    g_hwnd = hwnd;
 
     // 対象のウィンドウハンドル(hwnd)をサブクラス化して、様々なイベント処理に対応させる
     SetWindowSubclass(hwnd, SubclassProc, 1, 0);
@@ -373,5 +369,5 @@ void __stdcall UpdateThumbnailButton(const THUMBBUTTONDATA* data, const wchar_t*
     g_procNames[data->ButtonIndex - ButtonID_Correction] = callback;
 
     //変更を適用
-    g_taskbar->ThumbBarUpdateButtons(g_hwnd, MAX_BUTTONS, g_btns);
+    g_taskbar->ThumbBarUpdateButtons(data->TargetHwnd, MAX_BUTTONS, g_btns);
 }
