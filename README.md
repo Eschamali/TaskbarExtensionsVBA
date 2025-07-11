@@ -366,7 +366,7 @@ End Sub
 
 ### サンプルコード
 
-次のコードは、1つのボタンを追加し、そのボタンを押下すると、マクロ `Run01FromThumbnailToolbars` が実行されます。`InstallationButton` の2重実行を考慮してないので各自で工夫して下さい。
+次のコードは、1つのボタンを追加し、そのボタンを押下すると、マクロ `Run01FromThumbnailToolbars` が実行されます。
 
 ```bas
 Sub Demo_ThumbnailToolbars()
