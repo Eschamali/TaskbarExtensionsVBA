@@ -337,7 +337,7 @@ End Sub
 
 大まかな流れは下記になります
 
-1. [ClsThumbButton.cls](doc\SampleForVBA\Class\ClsThumbButton.cls) をインポート
+1. [ClsThumbButton.cls](doc/SampleForVBA/Class/ClsThumbButton.cls) をインポート
 2. `InstallationButton` メソッドで、初期化
 3. `SetProperty_THUMBBUTTON` メソッドで、必要な設定値を登録
 4. `UpdateButton` メソッドで、対応する設定値を反映
