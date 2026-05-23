@@ -41,14 +41,11 @@ Private Declare PtrSafe Function IIDFromString Lib "ole32" ( _
     ByRef riid As GUID) As Long
 
 ' propsys.dll の InitPropVariantFromString は環境によりエクスポートされていない事があるため、
-' CoTaskMemAlloc + 自前メモリコピーで VT_LPWSTR 形式の PROPVARIANT を構築する方式を取る。
-Private Declare PtrSafe Function CoTaskMemAlloc Lib "ole32" ( _
-    ByVal cb As LongPtr) As LongPtr
-
-Private Declare PtrSafe Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" ( _
-    ByVal Destination As LongPtr, _
-    ByVal Source As LongPtr, _
-    ByVal Length As LongPtr)
+' shlwapi.dll の SHStrDupW を使って VT_LPWSTR 用バッファを確保&コピーする。
+' SHStrDupW は内部で CoTaskMemAlloc により確保するので、PropVariantClear で自動解放可能。
+Private Declare PtrSafe Function SHStrDupW Lib "shlwapi" ( _
+    ByVal psz As LongPtr, _
+    ByRef ppwsz As LongPtr) As Long
 
 Private Declare PtrSafe Function PropVariantClear Lib "ole32.dll" ( _
     ByRef ppropvar As Any) As Long
@@ -371,27 +368,22 @@ End Sub
 '***************************************************************************************************
 
 ' PROPVARIANT を VT_LPWSTR 形式で初期化する (InitPropVariantFromString の代替)
-' 解放は PropVariantClear (CoTaskMemFree が走る) が行うので、CoTaskMemAlloc で確保する事が重要。
+' shlwapi.dll の SHStrDupW が CoTaskMemAlloc + 文字列コピーを 1 API で完結してくれるため、
+' CopyMemory(RtlMoveMemory) や自前のメモリ確保を一切持ち込まずに済む。
+' 解放は PropVariantClear (内部で CoTaskMemFree) が行う。
 Private Function InitPropVariantAsLPWSTR(ByVal s As String, ByRef pv As PROPVARIANT) As Long
     Const VT_LPWSTR As Integer = 31
-    Const E_OUTOFMEMORY As Long = &H8007000E
 
-    ' バイト長 = (文字数 + 終端NUL) * 2
-    Dim cb As LongPtr
-    cb = (LenB(s) + 2)
-
-    Dim p As LongPtr
-    p = CoTaskMemAlloc(cb)
-    If p = 0 Then
-        InitPropVariantAsLPWSTR = E_OUTOFMEMORY
+    Dim pCopied As LongPtr
+    Dim hr As Long
+    hr = SHStrDupW(StrPtr(s), pCopied)
+    If hr <> S_OK Then
+        InitPropVariantAsLPWSTR = hr
         Exit Function
     End If
 
-    ' BSTR本体 (StrPtrの指す領域) には終端NULも含まれているので、丸ごとコピー
-    Call CopyMemory(p, StrPtr(s), cb)
-
     pv.vt = VT_LPWSTR
-    pv.pVal = p
+    pv.pVal = pCopied
     InitPropVariantAsLPWSTR = S_OK
 End Function
 
