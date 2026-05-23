@@ -9,7 +9,7 @@ Option Private Module
 
 
 '***************************************************************************************************
-'                           ■■■ メンバ変数/ユーザー定義型宣言 ■■■
+'                                   ■■■ メンバ変数 ■■■
 '***************************************************************************************************
 Private Const AppUserModelID_Excel  As String = "Microsoft.Office.EXCEL.EXE.15" 'DeskTopアプリ：Excel
 Private JumpListItems               As Collection                               'Jumpリスト情報保持用
@@ -161,7 +161,7 @@ Private Const VTBL_COMMIT As Long = 7
 '***************************************************************************************************
 Public Sub Registration(ByVal 表示名 As String, ByVal 実行パス As String, Optional ByVal コマンド引数 As String, Optional ByVal カテゴリ名 As String, Optional ByVal 説明文 As String, Optional ByVal アイコンパス As String, Optional ByVal アイコンIndex As Long)
     ' アイコン未指定時はExcelのアイコンファイルを適用
-    If アイコンパス = "" Then アイコンパス = Application.Path & "\XLICONS.EXE"
+    If StrPtr(アイコンパス) = 0 Then アイコンパス = Application.Path & "\XLICONS.EXE"
 
     ' Collectionを初期化
     If JumpListItems Is Nothing Then Set JumpListItems = New Collection
@@ -796,7 +796,7 @@ End Function
 '***************************************************************************************************
 '                               ■■■ Demo用プロシージャ ■■■
 '***************************************************************************************************
-Sub demo_JumplistControl()
+Sub demo_JumplistControl1()
     ' 一旦クリア
     Call Clear
     
@@ -820,4 +820,26 @@ End Sub
 Sub demo_JumplistClear()
     Call Clear
     MsgBox "ジャンプリストをクリアしました！", vbInformation, "ジャンプリストクリア完了"
+End Sub
+
+Sub demo_JumplistControl2()
+    '-----入力件数分、ジャンプリスト登録データを追加-----
+    Registration "別インスタンスで、起動", Application.Path & "\EXCEL.EXE", "/x", "便利なExcel機能", "既存のExcelとは別プロセスで開きます"
+    Registration "Excel Online", "https://excel.cloud.microsoft/", , "便利なExcel機能", "Web 用 Excel を開きます"
+
+    Registration "Office TANAKA", "http://officetanaka.net/index.stm", , "役立つExcelサイト", "Excelのプロが運営するテクニック集のサイトです"
+    Registration "エクセルの神髄", "https://excel-ubara.com/", , "役立つExcelサイト", "エクセル(Excel)およびマクロVBA全般について入門解説から上級者に役立つ技術情報まで幅広く発信しています。"
+    Registration "日本語でコーディングするExcelVBA", "https://www.limecode.jp/", , "役立つExcelサイト", "「日本語の変数でプログラミングすれば、みんなが幸せになれる」というコンセプトの解説サイトです"
+    
+    Registration "Excel・VBA総合コミュニティ", "https://sites.google.com/view/excel-vba-fun", , , "Excel 好きが集まるDiscord コミュニティーホームページです。"
+    RegistrationSeparator
+    Registration "Discordを開く", "https://discord.gg/JpWaGbSd7A", , , "Excel コミュニティーの招待リンクで開きます"
+    
+
+    '-----ジャンプリストへ追加-----
+    Import
+
+
+    '-----完了メッセージ-----
+    MsgBox "登録完了しました。タスクバーの Excel を右クリックして、ご確認ください。", vbInformation, "ジャンプリスト"
 End Sub
