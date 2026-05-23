@@ -180,6 +180,34 @@ Public Sub Registration(ByVal 表示名 As String, ByVal 実行パス As String, Option
     target.Add "アイコンパス", アイコンパス
     target.Add "アイコンIndex", アイコンIndex
     target.Add "説明文", 説明文
+    target.Add "区切り線", False
+    
+    JumpListItems.Add target
+End Sub
+
+'***************************************************************************************************
+'* 機能    ：タスクセクションに「区切り線(セパレーター)」を1本追加します。
+'---------------------------------------------------------------------------------------------------
+'* 引数    ：なし
+'---------------------------------------------------------------------------------------------------
+'* 備考    ：区切り線はジャンプリストの「タスク」セクションでのみ動作する仕様(MSDN明記)。
+'*           カテゴリ内では描画されないため、本関数はカテゴリ無し(タスク行)として登録します。
+'***************************************************************************************************
+Public Sub RegistrationSeparator()
+    ' Collectionを初期化
+    If JumpListItems Is Nothing Then Set JumpListItems = New Collection
+    
+    Dim target As Dictionary
+    Set target = New Dictionary
+    
+    target.Add "カテゴリ名", ""        ' タスクセクション固定
+    target.Add "表示名", ""
+    target.Add "実行パス", ""           ' SetPath(NULL) 相当 (StrPtr("") = 0)
+    target.Add "コマンド引数", ""
+    target.Add "アイコンパス", ""
+    target.Add "アイコンIndex", 0&
+    target.Add "説明文", ""
+    target.Add "区切り線", True
     
     JumpListItems.Add target
 End Sub
@@ -367,6 +395,18 @@ Private Function InitPropVariantAsLPWSTR(ByVal s As String, ByRef pv As PROPVARI
     InitPropVariantAsLPWSTR = S_OK
 End Function
 
+' PROPVARIANT を VT_BOOL 形式で初期化する (VARIANT_BOOL: TRUE=-1 / FALSE=0)
+' pVal(LongPtr)に-1を入れると、低位2byte(boolVal)が0xFFFFになり VARIANT_TRUE として認識される。
+Private Sub InitPropVariantAsBool(ByVal v As Boolean, ByRef pv As PROPVARIANT)
+    Const VT_BOOL As Integer = 11
+    pv.vt = VT_BOOL
+    If v Then
+        pv.pVal = -1   ' VARIANT_TRUE
+    Else
+        pv.pVal = 0    ' VARIANT_FALSE
+    End If
+End Sub
+
 ' VTable経由のCOMメソッド呼び出し
 Private Function InvokeComMethod(ByVal pInterface As LongPtr, ByVal vTableIndex As Long, ByVal paramCount As Long, ByRef vTypes() As Integer, ByRef vPtrs() As LongPtr) As Long
     Dim vResult As Variant
@@ -518,37 +558,64 @@ Private Function CreateShellLink(item As Dictionary) As LongPtr
         Debug.Print "  SetShellLinkIconLocation result: 0x" & Hex(hr)
     End If
     
-    ' 表示名(Title)の登録 (IPropertyStore経由で設定)
-    If item("表示名") <> "" Then
+    ' --- IPropertyStore 経由のメタデータ設定 (表示名/区切り線) ---
+    Dim isSeparator As Boolean
+    isSeparator = False
+    If item.Exists("区切り線") Then isSeparator = CBool(item("区切り線"))
+    
+    Dim needPropStore As Boolean
+    needPropStore = isSeparator Or (item("表示名") <> "")
+    
+    If needPropStore Then
         Dim pPropStore As LongPtr
         Dim iidPropStore As GUID
         hr = IIDFromString(StrPtr(IID_IPropertyStore), iidPropStore)
-        If hr = S_OK Then
+        If hr <> S_OK Then
+            Debug.Print "  IIDFromString(IPropertyStore) failed: 0x" & Hex(hr)
+        Else
             hr = QueryInterface(pLink, iidPropStore, pPropStore)
             Debug.Print "  QueryInterface(IPropertyStore) result: 0x" & Hex(hr) & " ptr: 0x" & Hex(pPropStore)
             If hr = S_OK And pPropStore <> 0 Then
-                Dim keyTitle As PROPERTYKEY
-                Dim guidTitle As GUID
-                Call IIDFromString(StrPtr("{F29F85E0-4FF9-1068-AB91-08002B27B3D9}"), guidTitle)
-                keyTitle.fmtid = guidTitle
-                keyTitle.pid = 2 ' PKEY_Title
                 
-                Dim propvar As PROPVARIANT
-                hr = InitPropVariantAsLPWSTR(CStr(item("表示名")), propvar)
-                Debug.Print "  InitPropVariantAsLPWSTR result: 0x" & Hex(hr)
-                If hr = S_OK Then
-                    hr = SetPropertyValue(pPropStore, keyTitle, propvar)
-                    Debug.Print "  SetPropertyValue result: 0x" & Hex(hr)
-                    If hr = S_OK Then
-                        hr = CommitPropertyStore(pPropStore)
-                        Debug.Print "  CommitPropertyStore result: 0x" & Hex(hr)
-                    End If
-                    Call PropVariantClear(propvar)
+                ' --- 1. 区切り線フラグ (PKEY_AppUserModel_IsDestListSeparator) ---
+                If isSeparator Then
+                    Dim keySep As PROPERTYKEY
+                    Dim guidSep As GUID
+                    Call IIDFromString(StrPtr("{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}"), guidSep)
+                    keySep.fmtid = guidSep
+                    keySep.pid = 6 ' PKEY_AppUserModel_IsDestListSeparator
+                    
+                    Dim propvarSep As PROPVARIANT
+                    Call InitPropVariantAsBool(True, propvarSep)
+                    hr = SetPropertyValue(pPropStore, keySep, propvarSep)
+                    Debug.Print "  SetPropertyValue(IsDestListSeparator) result: 0x" & Hex(hr)
+                    Call PropVariantClear(propvarSep)
                 End If
+                
+                ' --- 2. 表示名 (PKEY_Title) ※区切り線の時は不要なのでスキップ ---
+                If (Not isSeparator) And (item("表示名") <> "") Then
+                    Dim keyTitle As PROPERTYKEY
+                    Dim guidTitle As GUID
+                    Call IIDFromString(StrPtr("{F29F85E0-4FF9-1068-AB91-08002B27B3D9}"), guidTitle)
+                    keyTitle.fmtid = guidTitle
+                    keyTitle.pid = 2 ' PKEY_Title
+                    
+                    Dim propvar As PROPVARIANT
+                    hr = InitPropVariantAsLPWSTR(CStr(item("表示名")), propvar)
+                    Debug.Print "  InitPropVariantAsLPWSTR result: 0x" & Hex(hr)
+                    If hr = S_OK Then
+                        hr = SetPropertyValue(pPropStore, keyTitle, propvar)
+                        Debug.Print "  SetPropertyValue(Title) result: 0x" & Hex(hr)
+                        Call PropVariantClear(propvar)
+                    End If
+                End If
+                
+                ' --- 設定値を反映 ---
+                hr = CommitPropertyStore(pPropStore)
+                Debug.Print "  CommitPropertyStore result: 0x" & Hex(hr)
+                
                 Call ComRelease(pPropStore)
             End If
-        Else
-            Debug.Print "  IIDFromString(IPropertyStore) failed: 0x" & Hex(hr)
         End If
     End If
     
@@ -744,6 +811,8 @@ Sub demo_JumplistControl()
     ' タスク登録
     Call Registration("メモ帳を起動", "notepad.exe", "", "", "Windows標準のメモ帳を起動します", "shell32.dll", 2)
     Call Registration("電卓を起動", "calc.exe", "", "", "Windows標準の電卓を起動します", "shell32.dll", 23)
+    Call RegistrationSeparator                        ' ←区切り線 (タスクセクション専用)
+    Call Registration("ペイント起動", "mspaint.exe", "", "", "Windows標準のペイントを起動します", "shell32.dll", 234)
     
     ' カスタムカテゴリ登録
     Call Registration("開発ドキュメント", "notepad.exe", "README.md", "お気に入り", "READMEファイルを開きます", "shell32.dll", 22)
