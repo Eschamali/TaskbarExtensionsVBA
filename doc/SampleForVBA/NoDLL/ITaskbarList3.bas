@@ -12,7 +12,7 @@ Option Private Module
 '               ■■■ VBA単体 (DispCallFunc × VTable) 内部関数宣言セクション ■■■
 '***************************************************************************************************
 ' 機能     ：ITaskbarList3 インターフェイスを CoCreateInstance で取得し、
-'            DispCallFunc 経由で VTable メソッド (SetProgressState / SetProgressValue) を呼び出します
+'            DispCallFunc 経由で VTable メソッド (SetProgressState / SetProgressValue / SetOverlayIcon) を呼び出します
 ' 参考     ：https://github.com/sancarn/stdVBA/blob/master/src/stdCOM.cls
 '***************************************************************************************************
 Private Declare PtrSafe Function DispCallFunc Lib "oleaut32" ( _
@@ -35,6 +35,16 @@ Private Declare PtrSafe Function CoCreateInstance Lib "ole32" ( _
 Private Declare PtrSafe Function IIDFromString Lib "ole32" ( _
     ByVal lpsz As LongPtr, _
     ByRef riid As GUID) As Long
+
+Private Declare PtrSafe Function ExtractIconExW Lib "shell32.dll" ( _
+    ByVal lpszFile As LongPtr, _
+    ByVal nIconIndex As Long, _
+    ByRef phiconLarge As LongPtr, _
+    ByRef phiconSmall As LongPtr, _
+    ByVal nIcons As Long) As Long
+
+Private Declare PtrSafe Function DestroyIcon Lib "user32.dll" ( _
+    ByVal hIcon As LongPtr) As Long
 
 
 
@@ -70,6 +80,7 @@ Private Const VTBL_RELEASE As Long = 2
 'ITaskbarList3 (IUnknown + ITaskbarList + ITaskbarList2 を継承した VTable インデックス)
 Private Const VTBL_SETPROGRESSVALUE As Long = 9
 Private Const VTBL_SETPROGRESSSTATE As Long = 10
+Private Const VTBL_SETOVERLAYICON As Long = 18
 
 
 
@@ -144,6 +155,29 @@ Private Function SetProgressValue(ByVal pTaskbarList As LongPtr, ByVal hwnd As L
     SetProgressValue = InvokeComMethod(pTaskbarList, VTBL_SETPROGRESSVALUE, 3, vTypes, vPtrs)
 End Function
 
+'***************************************************************************************************
+' 機能     ：ITaskbarList3::SetOverlayIcon
+'---------------------------------------------------------------------------------------------------
+' URL      ：https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setoverlayicon
+'***************************************************************************************************
+Private Function SetOverlayIcon(ByVal pTaskbarList As LongPtr, ByVal hwnd As LongPtr, ByVal hIcon As LongPtr, Optional ByVal Description As String) As Long
+    Dim vArgs(0 To 2) As Variant
+    Dim vTypes(0 To 2) As Integer
+    Dim vPtrs(0 To 2) As LongPtr
+
+    vArgs(0) = hwnd
+    vArgs(1) = hIcon
+    vArgs(2) = IIf(StrPtr(Description), Description, 0)
+    vTypes(0) = VT_PARAM_PTR
+    vTypes(1) = VT_PARAM_PTR
+    vTypes(2) = vbString
+    vPtrs(0) = VarPtr(vArgs(0))
+    vPtrs(1) = VarPtr(vArgs(1))
+    vPtrs(2) = VarPtr(vArgs(2))
+
+    SetOverlayIcon = InvokeComMethod(pTaskbarList, VTBL_SETOVERLAYICON, 3, vTypes, vPtrs)
+End Function
+
 
 
 '***************************************************************************************************
@@ -162,6 +196,34 @@ Private Sub SetTaskbarProgress(ByVal hwnd As LongPtr, ByVal current As Long, ByV
 
     If Status = TBPF_NORMAL Or Status = TBPF_PAUSED Or Status = TBPF_ERROR Then
         Call ITaskbarList3.SetProgressValue(pTaskbarList, hwnd, current, maximum)
+    End If
+
+    Call ComRelease(pTaskbarList)
+End Sub
+
+'***************************************************************************************************
+' 機能     ：SetOverlayIcon ヘルパー
+'***************************************************************************************************
+Private Sub SetTaskbarOverlayIcon(ByVal hwnd As LongPtr, ByVal IconPath As String, ByVal IconIndex As Long, ByVal Description As String)
+    Dim pTaskbarList As LongPtr
+    Dim hIcon As LongPtr
+
+    pTaskbarList = CreateITaskbarList3()
+    If pTaskbarList = 0 Then Exit Sub
+
+    Call TaskbarHrInit(pTaskbarList)
+
+    If IconIndex < 0 Then
+        Call ITaskbarList3.SetOverlayIcon(pTaskbarList, hwnd, 0)
+    Else
+        hIcon = LoadOverlayIcon(IconPath, IconIndex)
+        If hIcon = 0 Then
+            Call ComRelease(pTaskbarList)
+            Exit Sub
+        End If
+
+        Call ITaskbarList3.SetOverlayIcon(pTaskbarList, hwnd, hIcon, Description)
+        Call DestroyIcon(hIcon)
     End If
 
     Call ComRelease(pTaskbarList)
@@ -229,6 +291,46 @@ Private Sub ComRelease(ByVal pInterface As LongPtr)
     Call DispCallFunc(pInterface, VTBL_RELEASE * PTRSIZE, CC_STDCALL, vbLong, 0, 0, 0, vResult)
 End Sub
 
+
+
+'***************************************************************************************************
+'                               ■■■ その他 ヘルパー ■■■
+'***************************************************************************************************
+Private Function GetFileExtension(ByVal filePath As String) As String
+    Dim pos As Long
+
+    pos = InStrRev(filePath, ".")
+    If pos = 0 Then Exit Function
+    GetFileExtension = LCase$(Mid$(filePath, pos + 1))
+End Function
+
+Private Function LoadOverlayIcon(ByVal IconPath As String, ByVal IconIndex As Long) As LongPtr
+    Dim hIconLarge As LongPtr
+    Dim hIconSmall As LongPtr
+    Dim extracted As Long
+    Dim ext As String
+    Dim index As Long
+
+    ext = GetFileExtension(IconPath)
+    If ext <> "ico" And ext <> "exe" And ext <> "dll" Then Exit Function
+
+    If ext = "ico" Then
+        index = 0
+    Else
+        index = IconIndex
+    End If
+
+    extracted = ExtractIconExW(StrPtr(IconPath), index, hIconLarge, hIconSmall, 1)
+    If extracted = 0 Then Exit Function
+
+    If hIconSmall <> 0 Then
+        LoadOverlayIcon = hIconSmall
+        If hIconLarge <> 0 Then Call DestroyIcon(hIconLarge)
+    Else
+        LoadOverlayIcon = hIconLarge
+    End If
+End Function
+
 '***************************************************************************************************
 '* 機能    ：タスクバー API 呼び出しの診断（HRESULT を表示）
 '* 使い方  ：うまく表示されない場合に 1 回実行して、結果を確認してください
@@ -275,7 +377,7 @@ End Sub
 '* 詳細説明：ウィンドウハンドルが取れるアプリであれば何でもOKです
 '***************************************************************************************************
 Public Sub UpdateTaskbarProgress(currentProgress As Long, Optional maxProgress As Long = 100, Optional Status As SetProgressState = TBPF_NORMAL, Optional hwnd As LongPtr)
-    'hwnd未指定なら、Excelを指定
+    'hwnd未指定なら、このExcelを指定
     If hwnd = 0 Then hwnd = Application.hwnd
 
     SetTaskbarProgress hwnd, currentProgress, maxProgress, Status
@@ -308,6 +410,23 @@ Public Function SetProgressValueForWindowsTerminal(progress As Long, Optional st
     SetProgressValueForWindowsTerminal = "<NUL SET /p =" & Chr(27) & "]9;4;" & state & ";" & ProgressValue & Chr(7)
 End Function
 
+'***************************************************************************************************
+'* 機能    ：Windows Taskbar にステータスアイコン(オーバーレイ)を設定/更新します
+'---------------------------------------------------------------------------------------------------
+'* 引数　　：IconPath            アイコンデータのあるフルパス (.ico / .exe / .dll)
+'            IconIndex           複数アイコンがある場合の Index 値。-1 以下でリセット
+'            Description         アクセシビリティ向け説明文
+'            hwnd                適用先ウィンドウハンドル
+'---------------------------------------------------------------------------------------------------
+'* 詳細説明：ExtractIconExW でアイコンを取得し、ITaskbarList3::SetOverlayIcon を呼び出します
+'***************************************************************************************************
+Public Sub UpdateTaskbarOverlayIcon(IconPath As String, Optional IconIndex As Long = 0, Optional Description As String, Optional hwnd As LongPtr)
+    'hwnd未指定なら、このExcelを指定
+    If hwnd = 0 Then hwnd = Application.hwnd
+
+    SetTaskbarOverlayIcon hwnd, IconPath, IconIndex, Description
+End Sub
+
 
 
 '***************************************************************************************************
@@ -317,4 +436,11 @@ End Function
 '***************************************************************************************************
 Sub demo_UpdateTaskbarProgress()
     UpdateTaskbarProgress 50
+End Sub
+
+'***************************************************************************************************
+' 機能     ：SetOverlayIcon  Demo
+'***************************************************************************************************
+Sub demo_UpdateTaskbarOverlayIcon()
+    UpdateTaskbarOverlayIcon "C:\Windows\System32\shell32.dll", 240, "Custom Icon from VBA"
 End Sub
