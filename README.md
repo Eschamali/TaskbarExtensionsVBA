@@ -1,6 +1,6 @@
 # TaskbarExtensionsVBA
 
-Windows 7 以降で追加されたタスクバーに関するいくつかの機能を、拡張機能ファイル(dll)を経由して、VBAで操作できるようにしたものです。<br>
+Windows 7 以降で追加されたタスクバーに関するいくつかの機能を、**VBA 単体**（外部 DLL 不要）で操作できるようにしたものです。<br>
 [タスク バーの拡張機能 - Win32 apps | Microsoft Learn](https://learn.microsoft.com/ja-jp/windows/win32/shell/taskbar-extensions)
 
 VBAは非常に親しみやすく業務で根強く使われている一方、
@@ -8,10 +8,11 @@ VBAは非常に親しみやすく業務で根強く使われている一方、
 例えば、タスクバーに関する機能（進捗バー、サムネイルボタン、ジャンプリストなど）は、
 VBA単体で扱うにはハードルが高く、実用的ではありません。
 
-そこで、C++ 製の DLL を介して、VBA から簡単にタスクバー操作を行う方法を提案します。
+そこで、`DispCallFunc` と VTable 経由の COM 呼び出しを組み合わせ、
+**C++ 製 DLL を一切使わずに** VBA からタスクバー操作を行う方法を実装しました。
 通常のVBAの延長として扱えるため、VBA開発者の方でもすぐに活用可能です。
 
-✅ DLLファイルの使用が許可されている環境であれば、一度導入してみてはいかがでしょうか。
+✅ 外部 DLL の配布・読み込みが不要なので、導入のハードルがぐっと下がります。<br>
 VBAの可能性を一気に広げる選択肢になるかもしれません。
 
 あるいは、お遊び感覚で、タスクバーをいじるのも良いかも知れません。
@@ -56,7 +57,7 @@ VBAの可能性を一気に広げる選択肢になるかもしれません。
 
 ## Features
 
-- DLLインポートにより、数行で手軽に進捗状況とステータスの表現が可能です。ユーザーフォーム作ってプログレスバーを埋め込んで、呼び出して…　という手間が省けます。
+- **外部 DLL 不要** — VBA モジュールをインポートするだけで、数行で手軽に進捗状況とステータスの表現が可能です。ユーザーフォーム作ってプログレスバーを埋め込んで、呼び出して…　という手間が省けます。
 - ステータスに使えるアイコンソースファイルは、下記に対応しています
   - .icoファイル: 単独のアイコンファイル。
   - .exeファイル: 実行ファイル内に埋め込まれたリソースアイコン。
@@ -72,51 +73,48 @@ VBAの可能性を一気に広げる選択肢になるかもしれません。
 タスクバーのプログレスバー自体は、Windows 7から実装されたものですが当本人、所有していないためWin 10未満のOSは、未検証です…<br>
 Office製品も同様です。
 
-## Load DLL
+> [!IMPORTANT]
+> サムネイルツールバーのクリック検知には `ITaskbarSubclassHandler.cls` が **64 ビット VBA (x64)** を前提としています。32 ビット版 Office では動作しません。
 
-WindowsAPIの「LoadLibrary関数」を使って、読み込みます。
+## Setup
 
-```bas
-hDll = LoadLibrary("TaskbarExtensions.dll")
-```
+### コアファイル（必須）
 
-実際に使う場合は、"Excelファイル(.xlsm)の存在するディレクトリ"というような[動的な場所を設定する仕組み](https://liclog.net/vba-dll-create-5/)で読み込むことをおすすめします。
+VBE で以下の 3 ファイルをインポートしてください。
 
-```bas
-'動的にDLLを取得するためのWinAPI
-Private Declare PtrSafe Function LoadLibrary Lib "kernel32" Alias "LoadLibraryA" (ByVal lpLibFileName As String) As LongPtr
+| ファイル | 種類 | 役割 |
+| -------- | ---- | ---- |
+| [package/ITaskbarList3.cls](package/ITaskbarList3.cls) | クラス | プログレスバー・オーバーレイアイコン・サムネイルツールバー |
+| [package/ITaskbarSubclassHandler.cls](package/ITaskbarSubclassHandler.cls) | クラス | サムネイルツールバーのクリック検知（ウィンドウサブクラス） |
+| [package/ICustomDestinationList.bas](package/ICustomDestinationList.bas) | 標準モジュール | ジャンプリスト制御 |
 
-Private Sub Workbook_Open()
+### 便利ラッパー（任意）
 
-    Dim hDll As LongPtr
-    Dim sFolderPath As String
-    
-    'DLLファイルを保存するフォルダパスを設定
-    sFolderPath = ThisWorkbook.Path
-    
-    'DLLﾌｧｲﾙを読み込む
-    hDll = LoadLibrary(sFolderPath & "\" & "TaskbarExtensions.dll")　'DLLファイルフルパス
+よく使う操作をシンプルなプロシージャ名で呼び出せるラッパーモジュールです。
 
-    debug.print hDll
-End Sub
-```
+| ファイル | 役割 |
+| -------- | ---- |
+| [package/Demo/Mod04_ProgressBarTaskbar.bas](package/Demo/Mod04_ProgressBarTaskbar.bas) | `UpdateTaskbarProgress` など |
+| [package/Demo/Mod01_BadgeUpdateManager.bas](package/Demo/Mod01_BadgeUpdateManager.bas) | `UpdateTaskbarOverlayIcon` など |
+| [package/Demo/Mod03_ThumbnailToolbar.bas](package/Demo/Mod03_ThumbnailToolbar.bas) | サムネイルツールバーのデモ |
+| [package/Demo/Mod05_JumplistControl.bas](package/Demo/Mod05_JumplistControl.bas) | ジャンプリストのデモ |
 
-hDll の中身が、0 以外であれば読み込み、成功です。
+> [!TIP]
+> ラッパーを使わず、`ITaskbarList3` クラスのメソッドを直接呼び出しても構いません。
 
 ## Usage
 
-基本的には、[ここにある](doc/SampleForVBA) モジュールやクラスファイルをインポートするだけで済みます。詳しい内容は、次の項で
+基本的には、上記のモジュールやクラスファイルをインポートするだけで済みます。詳しい内容は、次の項で説明します。
 
 ## UpdateTaskbarProgress
 
 > [!IMPORTANT]
-> 事前に、[Mod04_ProgressBarTaskbar.bas](doc/SampleForVBA/Modules/Mod04_ProgressBarTaskbar.bas) のインポートをして下さい。
+> 事前に [Mod04_ProgressBarTaskbar.bas](package/Demo/Mod04_ProgressBarTaskbar.bas) と [ITaskbarList3.cls](package/ITaskbarList3.cls) のインポートをして下さい。
 
 ### サンプルコード
 
 ```bas
 Sub TaskbarProgressTest()
-    ' DLL関数の呼び出し
     UpdateTaskbarProgress 50
 End Sub
 ```
@@ -148,12 +146,12 @@ End Sub
 ## UpdateTaskbarOverlayIcon
 
 > [!IMPORTANT]
-> 事前に、[Mod01_BadgeUpdateManager.bas](doc/SampleForVBA/Modules/Mod01_BadgeUpdateManager.bas) のインポートをして下さい。
+> 事前に [Mod01_BadgeUpdateManager.bas](package/Demo/Mod01_BadgeUpdateManager.bas) と [ITaskbarList3.cls](package/ITaskbarList3.cls) のインポートをして下さい。
 
 ### サンプルコード
 
 ```bas
-Sub SetOverlayIconFromDLLExample()
+Sub SetOverlayIconExample()
     Dim dllPath As String
     Dim iconIndex As Long
     Dim description As String
@@ -167,9 +165,8 @@ Sub SetOverlayIconFromDLLExample()
     iconIndex = 240
     
     ' アイコンの説明テキスト
-    description = "Custom Icon from DLL"
+    description = "Custom Icon"
     
-    ' DLL関数を呼び出し、タスクバーにオーバーレイアイコンを設定
     UpdateTaskbarOverlayIcon dllPath, iconIndex, description
 End Sub
 ```
@@ -189,94 +186,12 @@ End Sub
 > [!TIP]
 > ステータスアイコンを除去するには、 iconIndex を -1 にすればOKです。
 
-## BadgeUpdaterDLL / BadgeUpdaterCmd
-
-> [!CAUTION]
-> この機能はUWP版を前提に設計している影響で、DeskTop版では動作しません。
-> 検証時は、[こちらをインストール](https://www.microsoft.com/store/productId/9WZDNCRFJBH3?ocid=libraryshare)する必要があります。  
-> しかし、どうやら`%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db`を弄ると、DeskTop版Excelでも動作するとか！？  
-> これに関しては、どこかのリポジトリで触れてるかもしれません😋
-
-### サンプルコード
-
-```bas
-Sub BadgeUpdaterExample()
-    'DLL経由で、実行
-    BadgeUpdaterDLL 30
-
-	'Shell 経由の場合(動作が遅い場合があります)
-	'Shell BadgeUpdaterCmd (30) ,vbhide
-End Sub
-```
-
-上記のサンプルをWin 11で実行すると、このようになります。<br>
-![alt text](doc/Demo13.png)
-
-### 引数の説明
-
-| 名称            | 説明                                                                             | 既定値 |
-| --------------- | -------------------------------------------------------------------------------- | --- |
-| BadgeID      | \<badge value="X"/> の X の値を決めるIDです。詳細は次のセクションで     | ※必須 |
-| appId           | [appUserModelID](https://www.ka-net.org/blog/?p=6250) を指定します。調べ方は、割愛します | Microsoft.Office.Excel_8wekyb3d8bbwe!microsoft.excel |
-
-### badgeValue のついて
-
-指定数値、識別子に応じて、バッチアイコンを変化する仕様にしています。
-詳細は、[こちら](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/badges)をどうぞ
-
-| BadgeID      | バッチアイコン                                                                             | 
-| --------- | -------------------------------------------------------------------------------- | 
-| 100以上   | ![100 Over](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-numeric-greater.png)     | 
-| 1 ~ 99    | ![1 from 99](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-numeric.png)           | 
-| bv_none | バッジ表示なし(リセット)                                                                                                                      | 
-| bv_activity | ![activity](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-activity.png)           | 
-| bv_alert    | ![alert](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-alert.png)           | 
-| bv_alarm    | ![alarm](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-alarm.png)           | 
-| bv_available | ![available](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-available.png)           | 
-| bv_away      | ![away](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-away.png)           | 
-| bv_busy      | ![busy](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-busy.png)           | 
-| bv_newMessage | ![newMessage](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-newMessage.png)           | 
-| bv_paused    | ![paused](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-paused.png)           | 
-| bv_playing   | ![playing](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-playing.png)           | 
-| bv_unavailable | ![unavailable](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-unavailable.png)           | 
-| bv_error     | ![error](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-error.png)           | 
-| bv_attention | ![attention](https://learn.microsoft.com/ja-jp/windows/apps/design/shell/tiles-and-notifications/images/badges/badge-attention.png)           | 
-
-> [!WARNING]
-> アプリを閉じる前に、`<badge value="none"/>` といった情報を送らないと、常にステータスアイコンが残り続けるので注意
-
-## BadgeUpdaterForWin32
-
-Win32アプリでも、通知数アイコンを表示する機能です。
-
-> [!CAUTION]
-> `playing` 等のステータスアイコンは非対応です。`UpdateTaskbarOverlayIcon` で対応して下さい。
-
-### 引数の説明
-
-| 名称            | 説明                                                                             | 既定値 |
-| --------------- | -------------------------------------------------------------------------------- | --- |
-| BadgeID      | 1 ~ 99 で、通知数アイコン。0 で消去です     | ※必須 |
-| hwnd           | ウィンドウハンドル | application.hend |
-
-### サンプルコード
-
-```bas
-Sub BadgeUpdaterExample()
-    BadgeUpdaterForWin32 30
-End Sub
-```
-
-![alt text](doc/Demo16.png)
-
-> [!NOTE]
-> 現時点では、背景色の色は変えれません
 
 ## ジャンプリストの登録方法
 
 大まかな流れは下記になります
 
-1. [Mod05_JumplistControl.bas](doc/SampleForVBA/Modules/Mod05_JumplistControl.bas) をインポート
+1. [ICustomDestinationList.bas](package/ICustomDestinationList.bas) をインポート
 2. `Registration` 関数で、必要な設定値を登録
 3. `Import` 関数で、ジャンプリストを登録
 
@@ -297,6 +212,8 @@ End Sub
 | アイコンパス      | リスト項目の左側に表示されるアイコンのファイルパスを指定します。         | Application.Path & "\XLICONS.EXE" |
 | アイコンIndex    | アイコンファイル内に複数アイコンがある場合、その中のどれを使うかを指定します（インデックス番号）。 | 0 |
 
+区切り線を入れる場合は `RegistrationSeparator` を使います（タスクセクション専用）。
+
 ![alt text](doc/Demo17.png)
 
 #### サンプルコード
@@ -305,7 +222,6 @@ End Sub
 
 ```bas
 Sub Demo_JumpList()
-    '-----入力件数分、ジャンプリスト登録データを追加-----
     Registration "別インスタンスで、起動", Application.Path & "\EXCEL.EXE", "/x", "便利なExcel機能", "既存のExcelとは別プロセスで開きます"
     Registration "Excel Online", "https://excel.cloud.microsoft/", , "便利なExcel機能", "Web 用 Excel を開きます"
 
@@ -314,41 +230,38 @@ Sub Demo_JumpList()
     Registration "日本語でコーディングするExcelVBA", "https://www.limecode.jp/", , "役立つExcelサイト", "「日本語の変数でプログラミングすれば、みんなが幸せになれる」というコンセプトの解説サイトです"
     
     Registration "Excel・VBA総合コミュニティ", "https://sites.google.com/view/excel-vba-fun", , , "Excel 好きが集まるDiscord コミュニティーホームページです。"
-    Registration "※区切り線", ""
+    RegistrationSeparator
     Registration "Discordを開く", "https://discord.gg/JpWaGbSd7A", , , "Excel コミュニティーの招待リンクで開きます"
-    
 
-    '-----ジャンプリストへ追加-----
     Import
 
-
-    '-----完了メッセージ-----
     MsgBox "登録完了しました。タスクバーの Excel を右クリックして、ご確認ください。", vbInformation, "ジャンプリスト"
 End Sub
 ```
 
 > [!CAUTION]
 > - Excelの仕様上、ファイルを開くたびに、内容がリセットされるため、恒久的な設定はできません。
-> - 区切り線は、カテゴリ名 = vbnullstring のみ効果があります
+> - 区切り線は、タスクセクションのみ効果あります
 
 > [!TIP]
-> - ジャンプリストの内容をクリアする場合は、`Registration` を呼び出さすに、`Import` を呼び出すことでクリア可能です。
+> - ジャンプリストの内容をクリアする場合は、`Clear` を呼び出してください。
 > - `Import` に、Excel以外の AppUserModelID を引数に指定すると、そこに設定が反映されます。
 
 ## サムネイル ツールバーの設定方法
 
 大まかな流れは下記になります
 
-1. [ClsThumbButton.cls](doc/SampleForVBA/Class/ClsThumbButton.cls) をインポート
-2. `InstallationButton` メソッドで、初期化
-3. `SetProperty_THUMBBUTTON` メソッドで、必要な設定値を登録
-4. `UpdateButton` メソッドで、対応する設定値を反映
+1. [ITaskbarList3.cls](package/ITaskbarList3.cls) と [ITaskbarSubclassHandler.cls](package/ITaskbarSubclassHandler.cls) をインポート
+2. `InitThumbBar` メソッドで、初期化
+3. `ConfigureThumbButton` メソッドで、必要な設定値を登録
+4. `UpdateThumbButton` メソッドで、対応する設定値を反映
 
-### InstallationButton
+### InitThumbBar
 
 ウィンドウハンドルを指定して初期化を行います。基本は、`Application.hwnd` でOKです。
+各アクティブな hwnd につき、1度のみ呼び出してください。
 
-### SetProperty_THUMBBUTTON
+### ConfigureThumbButton
 
 ボタンの設定情報を登録します。
 
@@ -356,11 +269,12 @@ End Sub
 
 | 引数名         | 説明         | 既定値 |
 |----------------|--------------------|---------|
+| buttonIndex   | ボタン番号（1 ～ 7） | ※必須 |
 | ProcedureName | VBE内のプロシージャ名 | ※必須 |
-| iconPath         | アイコンデータのあるフルパス | Application.Path & "\XLICONS.EXE" |
-| iconIndex        | 複数アイコンがある場合の、Index値。| 0 |
+| IconPath         | アイコンデータのあるフルパス | Application.Path & "\XLICONS.EXE" |
+| IconIndex        | 複数アイコンがある場合の、Index値。| 0 |
 | ButtonType       | [詳細はこちら](https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/ne-shobjidl_core-thumbbuttonflags) | THBF_ENABLED |
-| description      | ボタンにカーソルを当てた際のツールチップ | vbnullstring |
+| Description      | ボタンにカーソルを当てた際のツールチップ | vbnullstring |
 
 > [!CAUTION]
 > - できるだけ、ブック内にてプロシージャ名は、ユニークにしてください。  
@@ -373,27 +287,18 @@ End Sub
 
 ```bas
 Sub Demo_ThumbnailToolbars()
-    '必要な変数を定義
-    Dim タスクバーボタン As New ClsThumbButton
+    Dim taskbar As New ITaskbarList3
 
-    '設定を施す
-    With タスクバーボタン
-        'アクティブBookに対するハンドルに、ボタン設定を初期化(各アクティブな hwnd につき、1度のみ呼び出すこと)
-        .InstallationButton = Application.hwnd
-        
-        '1個設定
-        .SetProperty_THUMBBUTTON("Run01FromThumbnailToolbars", , , , "クリックしてマクロ発動") = 1
+    With taskbar
+        .InitThumbBar Application.hwnd
+        .ConfigureThumbButton 1, "Run01FromThumbnailToolbars", , , , "クリックしてマクロ発動"
+        .UpdateThumbButton 1
 
-        '設定を反映
-        .UpdateButton = 1
-
-		'通知させる
         MsgBox "登録完了しました。タスクバーの Excel にカーソルをあわせて、ご確認ください。", vbInformation, "サムネイルツールバー"
     End With
 End Sub
 
 
-'サムネイルツールバーから起動させるマクロ
 Sub Run01FromThumbnailToolbars()
     MsgBox "1つ目のボタンを押しました", vbInformation, "Pushed"
 End Sub
@@ -402,7 +307,7 @@ End Sub
 ![alt text](doc/Demo18.png)
 
 > [!NOTE]
-> - `SetProperty_THUMBBUTTON` メソッドによる設定情報は、1つのウィンドウにつき7つまでです。よって、追加できるボタンの最大数も7つです。
+> - 1つのウィンドウにつき7つまでボタンを設定できます。
 > - 厳密には削除ではなく、非表示でボタンの増減を実現してます。
 
 > [!IMPORTANT]
@@ -411,6 +316,19 @@ End Sub
 > [!CAUTION]
 > アイコンなしでも登録可能ですが、一度でもアイコンを設定すると後から、削除ができません。アイコンパス変更は可能です。
 
+## 技術メモ
+
+本プロジェクトのコア実装は、Windows API を C++ DLL にラップするのではなく、
+VBA から直接 COM インターフェイス（`ITaskbarList3` / `ICustomDestinationList` など）を
+`DispCallFunc` + VTable 呼び出しで操作しています。
+
+サムネイルツールバーのクリック検知には、ウィンドウサブクラス（`SetWindowSubclass`）と
+実行可能メモリ上のサンク（thunk）を組み合わせた `ITaskbarSubclassHandler` を使用しています。
+
+> [!NOTE]
+> リポジトリ内の `TaskbarExtensionsVBA/` フォルダには、旧来の C++ DLL 版のソースコードが残っていますが、現在の推奨利用方法は `package/` 配下の VBA ファイルです。
+
 # Attention
-DLL側の処理は、ある程度のエラー処理を施していますが、決して完璧ではありません。<br>
-そのため、DLLの関数を直接呼ぶのではなく、VBAの標準モジュール内のプロシージャを介して、エラー処理をしつつ、呼び出すことを推奨します。最近のPCであれば、誤差レベルです。
+
+COM 呼び出しやサブクラス処理は、ある程度のエラー処理を施していますが、決して完璧ではありません。<br>
+そのため、可能であればラッパーモジュール内のプロシージャを介して、エラー処理をしつつ呼び出すことを推奨します。
