@@ -285,9 +285,14 @@ End Sub
 
 次のコードは、1つのボタンを追加し、そのボタンを押下すると、マクロ `Run01FromThumbnailToolbars` が実行されます。
 
+> [!IMPORTANT]
+> `ITaskbarList3` は、内部で COM オブジェクトやウィンドウサブクラスを保持しています。
+> プロシージャ内の `Dim` だけで生成すると、処理終了後にオブジェクトが破棄され、ボタン表示やクリック検知が効かなくなります。
+> **`Static` やモジュールレベルの変数など、処理後もオブジェクトを保持する書き方**にしてください。
+
 ```bas
 Sub Demo_ThumbnailToolbars()
-    Dim taskbar As New ITaskbarList3
+    Static taskbar As New ITaskbarList3
 
     With taskbar
         .InitThumbBar Application.hwnd
@@ -301,6 +306,18 @@ End Sub
 
 Sub Run01FromThumbnailToolbars()
     MsgBox "1つ目のボタンを押しました", vbInformation, "Pushed"
+End Sub
+```
+
+モジュールレベルで保持する例:
+
+```bas
+Private m_taskbar As ITaskbarList3
+
+Sub SetupThumbnailToolbars()
+    If m_taskbar Is Nothing Then Set m_taskbar = New ITaskbarList3
+    m_taskbar.InitThumbBar Application.hwnd
+    ' ...
 End Sub
 ```
 
