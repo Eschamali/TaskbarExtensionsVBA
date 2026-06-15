@@ -108,6 +108,7 @@ Public Enum SetProgressStateForTerminal
     TER_ERROR          '"エラー" 状態で設定します。黄色ゲージになります
     TER_INDETERMINATE  '"不確定" 状態に設定します。 これは、進行状況の値を持たないが、まだ実行中のコマンドに役立ちます。
     TER_PAUSED         '"警告" 状態で設定します。一時停止・赤色ゲージになります
+End Enum
 
 Public Enum THUMBBUTTONFLAGS
     THBF_ENABLED = 0
