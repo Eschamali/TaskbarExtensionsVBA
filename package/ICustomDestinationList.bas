@@ -1,4 +1,4 @@
-Attribute VB_Name = "Mod05_JumplistControl"
+Attribute VB_Name = "ICustomDestinationList"
 '***************************************************************************************************
 '                           Windows 7以降にあるジャンプリストをVBAのみで制御します
 '                                       (DLLフリー版)
