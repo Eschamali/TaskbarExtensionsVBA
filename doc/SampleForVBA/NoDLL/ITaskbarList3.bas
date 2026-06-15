@@ -1,19 +1,20 @@
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
 Attribute VB_Name = "ITaskbarList3"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = False
+Attribute VB_Exposed = False
 '***************************************************************************************************
 '            Windows 7 以降 タスクバーボタンに、ITaskbarList3関連の機能を反映させます
 '       おまけとして、「Windows Terminal」用のプログレスバー定義用コマンドも生成させます
 '***************************************************************************************************
 Option Explicit
-Option Private Module
-
-
 
 '***************************************************************************************************
 '               ■■■ VBA単体 (DispCallFunc × VTable) 内部関数宣言セクション ■■■
-'***************************************************************************************************
-' 機能     ：ITaskbarList3 インターフェイスを CoCreateInstance で取得し、
-'            DispCallFunc 経由で VTable メソッド (SetProgressState / SetProgressValue / SetOverlayIcon) を呼び出します
-' 参考     ：https://github.com/sancarn/stdVBA/blob/master/src/stdCOM.cls
 '***************************************************************************************************
 Private Declare PtrSafe Function DispCallFunc Lib "oleaut32" ( _
     ByVal pvInstance As LongPtr, _
@@ -46,8 +47,6 @@ Private Declare PtrSafe Function ExtractIconExW Lib "shell32.dll" ( _
 Private Declare PtrSafe Function DestroyIcon Lib "user32.dll" ( _
     ByVal hIcon As LongPtr) As Long
 
-
-
 '***************************************************************************************************
 '                                   ■■■ 定数 / 型定義 ■■■
 '***************************************************************************************************
@@ -61,6 +60,7 @@ End Type
 Private Const CC_STDCALL As Long = 4
 Private Const CLSCTX_INPROC_SERVER As Long = 1
 Private Const S_OK As Long = 0
+Private Const STATE_UNSET As Long = -1
 
 Private Const CLSID_TaskbarList As String = "{56FDF344-FD6D-11d0-958A-006097C9A090}"
 Private Const IID_ITaskbarList3 As String = "{EA1AFBA6-0097-4908-9580-150FCC282DC6}"
@@ -80,9 +80,11 @@ Private Const VTBL_RELEASE As Long = 2
 'ITaskbarList3 (IUnknown + ITaskbarList + ITaskbarList2 を継承した VTable インデックス)
 Private Const VTBL_SETPROGRESSVALUE As Long = 9
 Private Const VTBL_SETPROGRESSSTATE As Long = 10
+Private Const VTBL_THUMBBARADDBUTTONS As Long = 15
+Private Const VTBL_THUMBBARUPDATEBUTTONS As Long = 16
 Private Const VTBL_SETOVERLAYICON As Long = 18
 
-
+Private Const MAX_THUMB_BUTTONS As Long = 7
 
 '***************************************************************************************************
 '                                   ■■■ 列挙型定義 ■■■
@@ -106,18 +108,247 @@ Public Enum SetProgressStateForTerminal
     TER_ERROR          '"エラー" 状態で設定します。黄色ゲージになります
     TER_INDETERMINATE  '"不確定" 状態に設定します。 これは、進行状況の値を持たないが、まだ実行中のコマンドに役立ちます。
     TER_PAUSED         '"警告" 状態で設定します。一時停止・赤色ゲージになります
+
+Public Enum THUMBBUTTONFLAGS
+    THBF_ENABLED = 0
+    THBF_DISABLED = 1
+    THBF_DISMISSONCLICK = 2
+    THBF_NOBACKGROUND = 4
+    THBF_HIDDEN = 8
+    THBF_NONINTERACTIVE = 16
 End Enum
 
 
 
 '***************************************************************************************************
-'                           ■■■ ITaskbarList3  各純メソッドヘルパー ■■■
+'                                   ■■■ メンバ変数 ■■■
+'***************************************************************************************************
+Private m_pTaskbarList As LongPtr
+Private m_initialized As Boolean
+Private m_lastState As Long
+Private m_lastHwnd As LongPtr
+
+Private m_thumbByHwnd As Object
+Private WithEvents m_app As Excel.Application
+Attribute m_app.VB_VarHelpID = -1
+Private m_appHooked As Boolean
+
+'***************************************************************************************************
+'                               ■■■ ライフサイクル ■■■
+'***************************************************************************************************
+Private Sub Class_Initialize()
+    m_lastState = STATE_UNSET
+End Sub
+
+Private Sub Class_Terminate()
+    Call CleanupAllThumbBars
+    Call ReleaseComObject
+    Set m_app = Nothing
+    m_appHooked = False
+End Sub
+
+Private Sub EnsureAppQuitHook()
+    If Not m_appHooked Then
+        Set m_app = Application
+        m_appHooked = True
+    End If
+End Sub
+
+Private Sub m_app_Quit()
+    Call CleanupAllThumbBars
+End Sub
+
+Private Sub m_app_WorkbookBeforeClose(ByVal Wb As Workbook, Cancel As Boolean)
+    Dim w As Window
+
+    On Error Resume Next
+    For Each w In Wb.Windows
+        Call RemoveThumbBarForHwnd(w.hwnd)
+    Next w
+    On Error GoTo 0
+End Sub
+
+'***************************************************************************************************
+'                               ■■■ Public API ■■■
+'***************************************************************************************************
+Public Sub UpdateProgress(ByVal currentProgress As Long, Optional ByVal maxProgress As Long = 100, Optional ByVal Status As SetProgressState = TBPF_NORMAL, Optional ByVal hwnd As LongPtr)
+    If hwnd = 0 Then hwnd = Application.hwnd
+    If Not EnsureInit() Then Exit Sub
+
+    If m_lastState <> CLng(Status) Or m_lastHwnd <> hwnd Then
+        Call ComSetProgressState(hwnd, CLng(Status))
+        m_lastState = CLng(Status)
+        m_lastHwnd = hwnd
+    End If
+
+    If Status = TBPF_NORMAL Or Status = TBPF_PAUSED Or Status = TBPF_ERROR Then
+        Call ComSetProgressValue(hwnd, currentProgress, maxProgress)
+    End If
+
+    If Status = TBPF_NOPROGRESS Then
+        m_lastState = STATE_UNSET
+    End If
+End Sub
+
+Public Sub UpdateOverlayIcon(ByVal IconPath As String, Optional ByVal IconIndex As Long = 0, Optional ByVal Description As String, Optional ByVal hwnd As LongPtr)
+    Dim hIcon As LongPtr
+
+    If hwnd = 0 Then hwnd = Application.hwnd
+    If Not EnsureInit() Then Exit Sub
+
+    If IconIndex < 0 Then
+        Call ComSetOverlayIcon(hwnd, 0)
+    Else
+        hIcon = LoadOverlayIcon(IconPath, IconIndex)
+        If hIcon = 0 Then Exit Sub
+
+        Call ComSetOverlayIcon(hwnd, hIcon, Description)
+        Call DestroyIcon(hIcon)
+    End If
+End Sub
+
+Public Function ProgressSequenceForTerminal(ByVal progress As Long, Optional ByVal state As SetProgressStateForTerminal = TER_NORMAL) As String
+    Dim ProgressValue As Integer
+
+    If progress < 0 Then
+        ProgressValue = 0
+    ElseIf progress > 100 Then
+        ProgressValue = 100
+    Else
+        ProgressValue = CInt(progress)
+    End If
+
+    ProgressSequenceForTerminal = "<NUL SET /p =" & Chr(27) & "]9;4;" & state & ";" & ProgressValue & Chr(7)
+End Function
+
+Public Sub Diagnose()
+    Dim hr As Long
+    Dim msg As String
+    Dim hwnd As LongPtr
+
+    hwnd = Application.hwnd
+    msg = "hwnd=" & Hex(hwnd) & vbCrLf
+
+    If Not EnsureInit() Then
+        MsgBox msg & "CoCreateInstance に失敗しました。", vbExclamation, "Taskbar Progress 診断"
+        Exit Sub
+    End If
+
+    msg = msg & "CreateITaskbarList3=" & Hex(m_pTaskbarList) & vbCrLf
+    msg = msg & "HrInit=0x" & Hex(S_OK) & vbCrLf
+
+    hr = ComSetProgressState(hwnd, TBPF_INDETERMINATE)
+    msg = msg & "SetProgressState(INDETERMINATE)=0x" & Hex(hr) & vbCrLf
+
+    hr = ComSetProgressValue(hwnd, 50, 100)
+    msg = msg & "SetProgressValue(50,100)=0x" & Hex(hr) & vbCrLf
+
+    MsgBox msg, vbInformation, "Taskbar Progress 診断"
+End Sub
+
+Public Sub Reset()
+    Call CleanupAllThumbBars
+    Call ReleaseComObject
+    m_initialized = False
+    m_lastState = STATE_UNSET
+    m_lastHwnd = 0
+End Sub
+
+'***************************************************************************************************
+'                               ■■■ サムネイルツールバー Public API ■■■
+'***************************************************************************************************
+Public Sub InitThumbBar(Optional ByVal hwnd As LongPtr)
+    Dim handler As ITaskbarSubclassHandler
+    Dim key As String
+
+    hwnd = ResolveThumbHwnd(hwnd)
+    key = ThumbHwndKey(hwnd)
+    If ThumbRegistry.Exists(key) Then Exit Sub
+
+    If Not EnsureInit() Then Exit Sub
+    Call EnsureAppQuitHook
+
+    Set handler = New ITaskbarSubclassHandler
+    Call handler.ResetThumbButtons
+    If ComThumbBarAddButtons(hwnd, MAX_THUMB_BUTTONS, handler.ButtonsPtr) <> S_OK Then Exit Sub
+    If Not handler.Attach(hwnd) Then Exit Sub
+
+    ThumbRegistry.Add key, handler
+End Sub
+
+Public Sub ConfigureThumbButton(ByVal buttonIndex As Long, ByVal ProcedureName As String, Optional ByVal IconPath As String, Optional ByVal IconIndex As Long = 0, Optional ByVal ButtonType As THUMBBUTTONFLAGS = THBF_ENABLED, Optional ByVal Description As String = vbNullString, Optional ByVal hwnd As LongPtr)
+    Dim handler As ITaskbarSubclassHandler
+
+    ValidateThumbButtonIndex buttonIndex
+    hwnd = ResolveThumbHwnd(hwnd)
+    Set handler = GetThumbHandler(hwnd)
+    If handler Is Nothing Then Exit Sub
+
+    If IconPath = "" Then IconPath = Application.Path & "\XLICONS.EXE"
+
+    Call handler.ConfigureButton(buttonIndex, ProcedureName, IconPath, IconIndex, CLng(ButtonType), Description)
+End Sub
+
+Public Sub UpdateThumbButton(ByVal buttonIndex As Long, Optional ByVal hwnd As LongPtr)
+    Dim handler As ITaskbarSubclassHandler
+    Dim hIcon As LongPtr
+    Dim IconPath As String
+    Dim IconIndex As Long
+
+    ValidateThumbButtonIndex buttonIndex
+    hwnd = ResolveThumbHwnd(hwnd)
+    Set handler = GetThumbHandler(hwnd)
+    If handler Is Nothing Then Exit Sub
+    If Not EnsureInit() Then Exit Sub
+
+    IconPath = handler.ConfigIconPath(buttonIndex)
+    IconIndex = handler.ConfigIconIndex(buttonIndex)
+    hIcon = 0
+    If IconIndex >= 0 Then
+        hIcon = LoadThumbIcon(IconPath, IconIndex)
+    End If
+
+    Call handler.ApplyButtonUpdate(buttonIndex, hIcon)
+    Call ComThumbBarUpdateButtons(hwnd, MAX_THUMB_BUTTONS, handler.ButtonsPtr)
+End Sub
+
+Public Sub ClearThumbButton(ByVal buttonIndex As Long, Optional ByVal hwnd As LongPtr)
+    Dim handler As ITaskbarSubclassHandler
+
+    If buttonIndex = 0 Then
+        Call ClearAllThumbButtons(hwnd)
+        Exit Sub
+    End If
+
+    ValidateThumbButtonIndex buttonIndex
+    hwnd = ResolveThumbHwnd(hwnd)
+    Set handler = GetThumbHandler(hwnd)
+    If handler Is Nothing Then Exit Sub
+
+    Call handler.ClearButton(buttonIndex)
+    Call ComThumbBarUpdateButtons(hwnd, MAX_THUMB_BUTTONS, handler.ButtonsPtr)
+End Sub
+
+Public Sub ClearAllThumbButtons(Optional ByVal hwnd As LongPtr)
+    Dim i As Long
+
+    hwnd = ResolveThumbHwnd(hwnd)
+    For i = 1 To MAX_THUMB_BUTTONS
+        Call ClearThumbButton(i, hwnd)
+    Next i
+End Sub
+
+Public Sub ReleaseThumbBar(Optional ByVal hwnd As LongPtr)
+    hwnd = ResolveThumbHwnd(hwnd)
+    Call RemoveThumbBarForHwnd(hwnd)
+End Sub
+
 '***************************************************************************************************
 ' 機能     ：ITaskbarList3::SetProgressState
 '---------------------------------------------------------------------------------------------------
 ' URL      ：https://learn.microsoft.com/ja-jp/windows/desktop/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setprogressstate
 '***************************************************************************************************
-Private Function SetProgressState(ByVal pTaskbarList As LongPtr, ByVal hwnd As LongPtr, ByVal state As Long) As Long
+Private Function ComSetProgressState(ByVal hwnd As LongPtr, ByVal state As Long) As Long
     Dim vArgs(0 To 1) As Variant
     Dim vTypes(0 To 1) As Integer
     Dim vPtrs(0 To 1) As LongPtr
@@ -129,7 +360,7 @@ Private Function SetProgressState(ByVal pTaskbarList As LongPtr, ByVal hwnd As L
     vPtrs(0) = VarPtr(vArgs(0))
     vPtrs(1) = VarPtr(vArgs(1))
 
-    SetProgressState = InvokeComMethod(pTaskbarList, VTBL_SETPROGRESSSTATE, 2, vTypes, vPtrs)
+    ComSetProgressState = InvokeComMethod(m_pTaskbarList, VTBL_SETPROGRESSSTATE, 2, vTypes, vPtrs)
 End Function
 
 '***************************************************************************************************
@@ -137,7 +368,7 @@ End Function
 '---------------------------------------------------------------------------------------------------
 ' URL      ：https://learn.microsoft.com/ja-jp/windows/desktop/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setprogressvalue
 '***************************************************************************************************
-Private Function SetProgressValue(ByVal pTaskbarList As LongPtr, ByVal hwnd As LongPtr, ByVal current As Long, ByVal maximum As Long) As Long
+Private Function ComSetProgressValue(ByVal hwnd As LongPtr, ByVal current As Long, ByVal maximum As Long) As Long
     Dim vArgs(0 To 2) As Variant
     Dim vTypes(0 To 2) As Integer
     Dim vPtrs(0 To 2) As LongPtr
@@ -152,7 +383,43 @@ Private Function SetProgressValue(ByVal pTaskbarList As LongPtr, ByVal hwnd As L
     vPtrs(1) = VarPtr(vArgs(1))
     vPtrs(2) = VarPtr(vArgs(2))
 
-    SetProgressValue = InvokeComMethod(pTaskbarList, VTBL_SETPROGRESSVALUE, 3, vTypes, vPtrs)
+    ComSetProgressValue = InvokeComMethod(m_pTaskbarList, VTBL_SETPROGRESSVALUE, 3, vTypes, vPtrs)
+End Function
+
+Private Function ComThumbBarAddButtons(ByVal hwnd As LongPtr, ByVal cButtons As Long, ByVal pButtons As LongPtr) As Long
+    Dim vArgs(0 To 2) As Variant
+    Dim vTypes(0 To 2) As Integer
+    Dim vPtrs(0 To 2) As LongPtr
+
+    vArgs(0) = hwnd
+    vArgs(1) = cButtons
+    vArgs(2) = pButtons
+    vTypes(0) = VT_PARAM_PTR
+    vTypes(1) = vbLong
+    vTypes(2) = VT_PARAM_PTR
+    vPtrs(0) = VarPtr(vArgs(0))
+    vPtrs(1) = VarPtr(vArgs(1))
+    vPtrs(2) = VarPtr(vArgs(2))
+
+    ComThumbBarAddButtons = InvokeComMethod(m_pTaskbarList, VTBL_THUMBBARADDBUTTONS, 3, vTypes, vPtrs)
+End Function
+
+Private Function ComThumbBarUpdateButtons(ByVal hwnd As LongPtr, ByVal cButtons As Long, ByVal pButtons As LongPtr) As Long
+    Dim vArgs(0 To 2) As Variant
+    Dim vTypes(0 To 2) As Integer
+    Dim vPtrs(0 To 2) As LongPtr
+
+    vArgs(0) = hwnd
+    vArgs(1) = cButtons
+    vArgs(2) = pButtons
+    vTypes(0) = VT_PARAM_PTR
+    vTypes(1) = vbLong
+    vTypes(2) = VT_PARAM_PTR
+    vPtrs(0) = VarPtr(vArgs(0))
+    vPtrs(1) = VarPtr(vArgs(1))
+    vPtrs(2) = VarPtr(vArgs(2))
+
+    ComThumbBarUpdateButtons = InvokeComMethod(m_pTaskbarList, VTBL_THUMBBARUPDATEBUTTONS, 3, vTypes, vPtrs)
 End Function
 
 '***************************************************************************************************
@@ -160,7 +427,7 @@ End Function
 '---------------------------------------------------------------------------------------------------
 ' URL      ：https://learn.microsoft.com/ja-jp/windows/win32/api/shobjidl_core/nf-shobjidl_core-itaskbarlist3-setoverlayicon
 '***************************************************************************************************
-Private Function SetOverlayIcon(ByVal pTaskbarList As LongPtr, ByVal hwnd As LongPtr, ByVal hIcon As LongPtr, Optional ByVal Description As String) As Long
+Private Function ComSetOverlayIcon(ByVal hwnd As LongPtr, ByVal hIcon As LongPtr, Optional ByVal Description As String) As Long
     Dim vArgs(0 To 2) As Variant
     Dim vTypes(0 To 2) As Integer
     Dim vPtrs(0 To 2) As LongPtr
@@ -175,67 +442,28 @@ Private Function SetOverlayIcon(ByVal pTaskbarList As LongPtr, ByVal hwnd As Lon
     vPtrs(1) = VarPtr(vArgs(1))
     vPtrs(2) = VarPtr(vArgs(2))
 
-    SetOverlayIcon = InvokeComMethod(pTaskbarList, VTBL_SETOVERLAYICON, 3, vTypes, vPtrs)
+    ComSetOverlayIcon = InvokeComMethod(m_pTaskbarList, VTBL_SETOVERLAYICON, 3, vTypes, vPtrs)
 End Function
-
-
-
-'***************************************************************************************************
-'                    ■■■ VBAから操作しやすいように改良した各種ヘルパー ■■■
-'***************************************************************************************************
-' 機能     ：SetProgressState/SetProgressValue を統合して、1つのプロシージャで呼び出すようにします
-'***************************************************************************************************
-Private Sub SetTaskbarProgress(ByVal hwnd As LongPtr, ByVal current As Long, ByVal maximum As Long, ByVal Status As Long)
-    Dim pTaskbarList As LongPtr
-
-    pTaskbarList = CreateITaskbarList3()
-    If pTaskbarList = 0 Then Exit Sub
-
-    Call TaskbarHrInit(pTaskbarList)
-    Call ITaskbarList3.SetProgressState(pTaskbarList, hwnd, Status)
-
-    If Status = TBPF_NORMAL Or Status = TBPF_PAUSED Or Status = TBPF_ERROR Then
-        Call ITaskbarList3.SetProgressValue(pTaskbarList, hwnd, current, maximum)
-    End If
-
-    Call ComRelease(pTaskbarList)
-End Sub
-
-'***************************************************************************************************
-' 機能     ：SetOverlayIcon ヘルパー
-'***************************************************************************************************
-Private Sub SetTaskbarOverlayIcon(ByVal hwnd As LongPtr, ByVal IconPath As String, ByVal IconIndex As Long, ByVal Description As String)
-    Dim pTaskbarList As LongPtr
-    Dim hIcon As LongPtr
-
-    pTaskbarList = CreateITaskbarList3()
-    If pTaskbarList = 0 Then Exit Sub
-
-    Call TaskbarHrInit(pTaskbarList)
-
-    If IconIndex < 0 Then
-        Call ITaskbarList3.SetOverlayIcon(pTaskbarList, hwnd, 0)
-    Else
-        hIcon = LoadOverlayIcon(IconPath, IconIndex)
-        If hIcon = 0 Then
-            Call ComRelease(pTaskbarList)
-            Exit Sub
-        End If
-
-        Call ITaskbarList3.SetOverlayIcon(pTaskbarList, hwnd, hIcon, Description)
-        Call DestroyIcon(hIcon)
-    End If
-
-    Call ComRelease(pTaskbarList)
-End Sub
 
 
 
 '***************************************************************************************************
 '                               ■■■ COM / VTable ヘルパー ■■■
 '***************************************************************************************************
-' 機能     ：ITaskbarList3 インターフェイスを操作するためのヘルパー群です。
-'***************************************************************************************************
+Private Function EnsureInit() As Boolean
+    If m_pTaskbarList = 0 Then
+        m_pTaskbarList = CreateITaskbarList3()
+        If m_pTaskbarList = 0 Then Exit Function
+    End If
+
+    If Not m_initialized Then
+        If TaskbarHrInit(m_pTaskbarList) <> S_OK Then Exit Function
+        m_initialized = True
+    End If
+
+    EnsureInit = True
+End Function
+
 Private Function CreateITaskbarList3() As LongPtr
     Dim clsid As GUID
     Dim iid As GUID
@@ -291,6 +519,13 @@ Private Sub ComRelease(ByVal pInterface As LongPtr)
     Call DispCallFunc(pInterface, VTBL_RELEASE * PTRSIZE, CC_STDCALL, vbLong, 0, 0, 0, vResult)
 End Sub
 
+Private Sub ReleaseComObject()
+    If m_pTaskbarList <> 0 Then
+        Call ComRelease(m_pTaskbarList)
+        m_pTaskbarList = 0
+    End If
+End Sub
+
 
 
 '***************************************************************************************************
@@ -331,116 +566,96 @@ Private Function LoadOverlayIcon(ByVal IconPath As String, ByVal IconIndex As Lo
     End If
 End Function
 
-'***************************************************************************************************
-'* 機能    ：タスクバー API 呼び出しの診断（HRESULT を表示）
-'* 使い方  ：うまく表示されない場合に 1 回実行して、結果を確認してください
-'***************************************************************************************************
-Public Sub DiagnoseTaskbarProgress()
-    Dim pTaskbarList As LongPtr
-    Dim hr As Long
-    Dim msg As String
+Private Function ThumbHwndKey(ByVal hwnd As LongPtr) As String
+    ThumbHwndKey = CStr(hwnd)
+End Function
 
-    pTaskbarList = CreateITaskbarList3()
-    msg = "hwnd=" & Hex(Application.hwnd) & vbCrLf
-    msg = msg & "CreateITaskbarList3=" & Hex(pTaskbarList) & vbCrLf
+Private Function ResolveThumbHwnd(Optional ByVal hwnd As LongPtr) As LongPtr
+    If hwnd = 0 Then
+        On Error Resume Next
+        hwnd = ActiveWindow.hwnd
+        If hwnd = 0 Then hwnd = Application.hwnd
+        On Error GoTo 0
+    End If
+    ResolveThumbHwnd = hwnd
+End Function
 
-    If pTaskbarList = 0 Then
-        MsgBox msg & "CoCreateInstance に失敗しました。", vbExclamation, "Taskbar Progress 診断"
+Private Function ThumbRegistry() As Object
+    If m_thumbByHwnd Is Nothing Then
+        Set m_thumbByHwnd = CreateObject("Scripting.Dictionary")
+        m_thumbByHwnd.CompareMode = 1
+    End If
+    Set ThumbRegistry = m_thumbByHwnd
+End Function
+
+Private Function GetThumbHandler(ByVal hwnd As LongPtr) As ITaskbarSubclassHandler
+    Dim key As String
+
+    key = ThumbHwndKey(hwnd)
+    If ThumbRegistry.Exists(key) Then
+        Set GetThumbHandler = ThumbRegistry(key)
+    End If
+End Function
+
+Private Sub RemoveThumbBarForHwnd(ByVal hwnd As LongPtr)
+    Dim handler As ITaskbarSubclassHandler
+    Dim key As String
+
+    If hwnd = 0 Then Exit Sub
+    key = ThumbHwndKey(hwnd)
+    If Not ThumbRegistry.Exists(key) Then Exit Sub
+
+    Set handler = ThumbRegistry(key)
+    Call handler.ReleaseAllThumbIcons
+    Call handler.Detach
+    ThumbRegistry.Remove key
+    Set handler = Nothing
+End Sub
+
+Private Sub DisconnectAppQuitHook()
+    Set m_app = Nothing
+    m_appHooked = False
+End Sub
+
+Private Sub CleanupAllThumbBars()
+    Dim keys As Variant
+    Dim i As Long
+    Dim hwnd As LongPtr
+
+    Call DisconnectAppQuitHook
+
+    If m_thumbByHwnd Is Nothing Then Exit Sub
+    If m_thumbByHwnd.Count = 0 Then
+        Set m_thumbByHwnd = Nothing
         Exit Sub
     End If
 
-    hr = TaskbarHrInit(pTaskbarList)
-    msg = msg & "HrInit=0x" & Hex(hr) & vbCrLf
-
-    hr = SetProgressState(pTaskbarList, Application.hwnd, TBPF_INDETERMINATE)
-    msg = msg & "SetProgressState(INDETERMINATE)=0x" & Hex(hr) & vbCrLf
-
-    hr = SetProgressValue(pTaskbarList, Application.hwnd, 50, 100)
-    msg = msg & "SetProgressValue(50,100)=0x" & Hex(hr) & vbCrLf
-
-    Call ComRelease(pTaskbarList)
-    MsgBox msg, vbInformation, "Taskbar Progress 診断"
+    keys = m_thumbByHwnd.keys
+    For i = LBound(keys) To UBound(keys)
+        hwnd = CLngPtr(keys(i))
+        Call RemoveThumbBarForHwnd(hwnd)
+    Next i
+    Set m_thumbByHwnd = Nothing
 End Sub
 
+Private Function LoadThumbIcon(ByVal IconPath As String, ByVal IconIndex As Long) As LongPtr
+    Dim hIconLarge As LongPtr
+    Dim hIconSmall As LongPtr
+    Dim extracted As Long
 
+    extracted = ExtractIconExW(StrPtr(IconPath), IconIndex, hIconLarge, hIconSmall, 1)
+    If extracted = 0 Then Exit Function
 
-'***************************************************************************************************
-'                               ■■■ メインプロシージャ ■■■
-'***************************************************************************************************
-'* 機能    ：Windows Taskbar Progress Barを設定/更新します
-'---------------------------------------------------------------------------------------------------
-'* 引数　　：currentProgress    現在の進捗値
-'            maxProgress        100%とする値
-'            Status             プログレスバーの種類
-'            hwnd               ウィンドウハンドル(通常は、Application.hwnd)
-'---------------------------------------------------------------------------------------------------
-'* 詳細説明：ウィンドウハンドルが取れるアプリであれば何でもOKです
-'***************************************************************************************************
-Public Sub UpdateTaskbarProgress(currentProgress As Long, Optional maxProgress As Long = 100, Optional Status As SetProgressState = TBPF_NORMAL, Optional hwnd As LongPtr)
-    'hwnd未指定なら、このExcelを指定
-    If hwnd = 0 Then hwnd = Application.hwnd
-
-    SetTaskbarProgress hwnd, currentProgress, maxProgress, Status
-End Sub
-
-'***************************************************************************************************
-'* 機能    ：Windows Terminal 専用の、Windows Taskbar Progress Barを設定します
-'---------------------------------------------------------------------------------------------------
-'* 返り値　：Windows Terminalに進捗状況を送信する制御文字列。
-'* 引数　　：progress      0～100　の進捗値を設定
-'            state         進捗状況のステータスを設定。0、1、2、3、4 のいずれかです。上部のユーザー定義型「SetProgressStateForTerminal」を参考に
-'---------------------------------------------------------------------------------------------------
-'* 詳細説明：Windows Terminal内のbatファイルで扱えるConEmu "進行状況バー" シーケンス ("OSC 9;4" とも呼ばれます)の設定文字列を返します。
-'* 注意事項：batファイルから、進捗状況を反映するときに使うこと。Windows Terminal v1.6 以降。
-'* URL     ：https://learn.microsoft.com/ja-jp/windows/terminal/tutorials/progress-bar-sequences
-'***************************************************************************************************
-Public Function SetProgressValueForWindowsTerminal(progress As Long, Optional state As SetProgressStateForTerminal = 1) As String
-    '0-100の範囲に収める
-    Dim ProgressValue As Integer
-    If progress < 0 Then
-        ProgressValue = 0
-    ElseIf progress > 100 Then
-        ProgressValue = 100
+    If hIconSmall <> 0 Then
+        LoadThumbIcon = hIconSmall
+        If hIconLarge <> 0 Then Call DestroyIcon(hIconLarge)
     Else
-        ProgressValue = progress
+        LoadThumbIcon = hIconLarge
     End If
-
-    '進行状況バー シーケンスの形式を返します。コマンド プロンプトの場合、制御文字を直接、埋め込むことで実現します
-    '→https://learn.microsoft.com/en-us/windows/terminal/tutorials/progress-bar-sequences
-    SetProgressValueForWindowsTerminal = "<NUL SET /p =" & Chr(27) & "]9;4;" & state & ";" & ProgressValue & Chr(7)
 End Function
 
-'***************************************************************************************************
-'* 機能    ：Windows Taskbar にステータスアイコン(オーバーレイ)を設定/更新します
-'---------------------------------------------------------------------------------------------------
-'* 引数　　：IconPath            アイコンデータのあるフルパス (.ico / .exe / .dll)
-'            IconIndex           複数アイコンがある場合の Index 値。-1 以下でリセット
-'            Description         アクセシビリティ向け説明文
-'            hwnd                適用先ウィンドウハンドル
-'---------------------------------------------------------------------------------------------------
-'* 詳細説明：ExtractIconExW でアイコンを取得し、ITaskbarList3::SetOverlayIcon を呼び出します
-'***************************************************************************************************
-Public Sub UpdateTaskbarOverlayIcon(IconPath As String, Optional IconIndex As Long = 0, Optional Description As String, Optional hwnd As LongPtr)
-    'hwnd未指定なら、このExcelを指定
-    If hwnd = 0 Then hwnd = Application.hwnd
-
-    SetTaskbarOverlayIcon hwnd, IconPath, IconIndex, Description
-End Sub
-
-
-
-'***************************************************************************************************
-'                               ■■■ Demo用プロシージャ ■■■
-'***************************************************************************************************
-' 機能     ：SetProgressState/SetProgressValue Demo
-'***************************************************************************************************
-Sub demo_UpdateTaskbarProgress()
-    UpdateTaskbarProgress 50
-End Sub
-
-'***************************************************************************************************
-' 機能     ：SetOverlayIcon  Demo
-'***************************************************************************************************
-Sub demo_UpdateTaskbarOverlayIcon()
-    UpdateTaskbarOverlayIcon "C:\Windows\System32\shell32.dll", 240, "Custom Icon from VBA"
+Private Sub ValidateThumbButtonIndex(ByVal buttonIndex As Long)
+    If buttonIndex < 1 Or buttonIndex > MAX_THUMB_BUTTONS Then
+        Err.Raise vbObjectError + 1, "ITaskbarList3", "ボタンインデックスは 1 ～ 7 にしてください。"
+    End If
 End Sub
